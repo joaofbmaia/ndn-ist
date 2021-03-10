@@ -1,0 +1,10 @@
+BasedOnStyle: Google
+IndentWidth: 4
+
+ColumnLimit: 0
+SpaceAfterCStyleCast: true
+
+DerivePointerAlignment: false
+PointerAlignment: Right
+
+IncludeBlocks: Merge
