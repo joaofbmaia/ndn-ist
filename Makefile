@@ -1,17 +1,5 @@
-OBJS	= main.o
-SOURCE	= main.c
-HEADER	= ola.h
-OUT	= ndn
-FLAGS	 = -g3 -c -Wall
-LFLAGS	 = 
-
-all: ndn
-
-ndn: $(OBJS)
-	$(CC) $(FLAGS) -o $@ $^ $(LFLAGS)
-
-%.o: %.c $(HEADER)
-	$(CC) $(FLAGS) -c -o $@ $< $(LFLAGS)
+all:
+	gcc -g3 -Wall -o ndn *.c 
 
 # clean house
 clean:
