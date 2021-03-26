@@ -44,11 +44,11 @@ void argumentParser(int argc, char *argv[], struct sockaddr_in *nodeSelf, struct
         argError();
     }
 
-    nodeSelf->sin_port = port;
+    nodeSelf->sin_port = htons(port);
     nodeSelf->sin_family = AF_INET;
 
     if (argc < 5) {
-        nodeServer->sin_port = DEFAULT_REGUDP;
+        port = DEFAULT_REGUDP;
     } else {
         if (sscanf(argv[4], "%d", &port) == 1) {
             if (port < 1 || port > 65536) {
@@ -61,7 +61,7 @@ void argumentParser(int argc, char *argv[], struct sockaddr_in *nodeSelf, struct
         }
     }
 
-    nodeServer->sin_port = port;
+    nodeServer->sin_port = htons(port);
 
     if (argc < 4) {
         inet_pton(AF_INET, DEFAULT_REGIP, &(nodeServer->sin_addr));
@@ -83,15 +83,15 @@ void argError(void) {
 }
 
 int commandParser(char *buffer, char *net, char *id, char *name, struct sockaddr_in *nodeExtern) {
-    char tokens[5][256];
+    char tokens[6][256];
     int tokenCount;
 
     int port;
     
-    tokenCount = sscanf(buffer, "%s %s %s %s %s", tokens[0], tokens[1], tokens[2], tokens[3], tokens[4]);
+    tokenCount = sscanf(buffer, "%s %s %s %s %s %s", tokens[0], tokens[1], tokens[2], tokens[3], tokens[4], tokens[5]);
 
-    if (!tokenCount) {
-        return CC_ERROR;  // work might be needed. one day ENTERS RETURNING ERROR MESSAGE TO BE FIXED
+    if (tokenCount == EOF) {
+        return CC_ERROR;
     }
 
     if (!strcmp(tokens[0], "join")) {
