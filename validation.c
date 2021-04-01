@@ -1,10 +1,11 @@
 #include "validation.h"
-#include "commandCodes.h"
 #include <arpa/inet.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "commandCodes.h"
+#include "defines.h"
 
 #define DEFAULT_REGUDP 59000
 #define DEFAULT_REGIP "193.136.138.142"
@@ -83,11 +84,11 @@ void argError(void) {
 }
 
 int commandParser(char *buffer, char *net, char *id, char *name, struct sockaddr_in *nodeExtern) {
-    char tokens[6][256];
+    char tokens[6][BUFFER_SIZE];
     int tokenCount;
 
     int port;
-    
+
     tokenCount = sscanf(buffer, "%s %s %s %s %s %s", tokens[0], tokens[1], tokens[2], tokens[3], tokens[4], tokens[5]);
 
     if (tokenCount == EOF) {
@@ -136,7 +137,7 @@ int commandParser(char *buffer, char *net, char *id, char *name, struct sockaddr
         }
     } else if (!strcmp(tokens[0], "get")) {
         if (tokenCount == 2) {
-            if(!strchr(tokens[1], '.')) {
+            if (!strchr(tokens[1], '.')) {
                 fprintf(stderr, "%s", "error: invalid name format\n");
                 fprintf(stderr, "%s", "usage: get id.subname\n");
                 return CC_ERROR;
@@ -151,11 +152,11 @@ int commandParser(char *buffer, char *net, char *id, char *name, struct sockaddr
         if (tokenCount != 2) {
             fprintf(stderr, "%s", "error: invalid format\n");
             fprintf(stderr, "%s", "usage: show topology,routing,cache\n");
-        } else if (!strcmp(tokens[1], "topology")){
+        } else if (!strcmp(tokens[1], "topology")) {
             return CC_SHOWTOPOLOGY;
-        } else if (!strcmp(tokens[1], "routing")){
+        } else if (!strcmp(tokens[1], "routing")) {
             return CC_SHOWROUTING;
-        } else if (!strcmp(tokens[1], "cache")){
+        } else if (!strcmp(tokens[1], "cache")) {
             return CC_SHOWCACHE;
         } else {
             fprintf(stderr, "%s", "error: invalid format\n");
@@ -172,8 +173,7 @@ int commandParser(char *buffer, char *net, char *id, char *name, struct sockaddr
         return CC_SHOWROUTING;
     } else if (!strcmp(tokens[0], "sc")) {
         return CC_SHOWCACHE;
-    }
-    else {
+    } else {
         fprintf(stderr, "%s", "error: unknown command\n");
     }
 
