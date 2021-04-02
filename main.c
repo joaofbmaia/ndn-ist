@@ -2,18 +2,19 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/select.h>
+#include <time.h>
+#include <stdlib.h>
 #include "commandCodes.h"
 #include "defines.h"
 #include "network.h"
 #include "validation.h"
 
 int main(int argc, char *argv[]) {
-    struct sockaddr_in nodeSelf, nodeServer, nodeExtern;
-    struct sockaddr_in nodeList[MAX_LIST_SIZE];
+    struct sockaddr_in nodeSelf, nodeServer, nodeExtern, recoveryNode;
 
     fd_set rfds;
-    int counter, command, maxfd, nodeListSize;
-
+    int counter, command, maxfd, err;
+    int externFd, listeningFd;
     char buffer[BUFFER_SIZE];
     char net[BUFFER_SIZE], id[BUFFER_SIZE], name[BUFFER_SIZE];
 
@@ -21,7 +22,14 @@ int main(int argc, char *argv[]) {
            registered,
            goingOut } state;
 
+    time_t t;
+
     argumentParser(argc, argv, &nodeSelf, &nodeServer);
+
+    srand((unsigned) time(&t));
+    
+    memset(&nodeExtern, 0, sizeof nodeExtern);
+    
 
     state = notReg;
     printf("> ");
@@ -38,7 +46,7 @@ int main(int argc, char *argv[]) {
         }
 
         counter = select(maxfd + 1, &rfds, NULL, NULL, NULL);
-        //if select goes wrong maybe put aa message
+        //if select goes wrong maybe put a message
         for (; counter > 0; counter--) {
             switch (state) {
                 case notReg:
@@ -51,12 +59,12 @@ int main(int argc, char *argv[]) {
                             case CC_ERROR:
                                 break;
                             case CC_JOIN:
-                                nodeListSize = getNodeList(&nodeServer, net, nodeList);
-                                if (nodeListSize >= 0) {
+                                err = join(&nodeSelf, &nodeServer, &nodeExtern, &recoveryNode, net, &externFd, &listeningFd);
+                                if (externFd >= 0) {
                                     printf("Fáaaacil!\n");
                                     state = registered;
                                 } else {
-                                    printf("error: %d\n", nodeListSize);
+                                    printf("error: %d\n", err);
                                 }
                                 break;
                             case CC_JOINBOOT:
