@@ -12,7 +12,7 @@
 /*Executes command join
 Write complete header at a later stage*/
 int join(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, struct sockaddr_in *nodeExtern, struct sockaddr_in *recoveryNode, char *net, int *externFd, int *listeningFd) {
-    int nodeListSize;
+    int nodeListSize = 1;
     int err;
     struct sockaddr_in nodeList[MAX_LIST_SIZE];
 
@@ -45,6 +45,25 @@ int join(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, struct so
     // abrir TCP server para alguem se poder ligar a ti
 
     err = reg(nodeSelf, nodeServer, net);
+    if(err) {
+        return err;
+    }
+
+    return 0;
+}
+
+int leave(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, struct sockaddr_in *nodeExtern, struct sockaddr_in *recoveryNode, char *net, int *externFd, int *listeningFd) {
+    int err;
+
+    // mandar mensagens de bye bye
+    // fechar fds todos
+    
+    memset(nodeExtern, 0, sizeof *nodeExtern);
+    memset(recoveryNode, 0, sizeof *recoveryNode);
+    *externFd = -1;
+    *listeningFd = -1;
+
+    err = unreg(nodeSelf, nodeServer, net);
     if(err) {
         return err;
     }
@@ -225,6 +244,64 @@ int reg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *net)
     buffer[n] = '\0';
 
     if (strcmp(buffer, "OKREG")) {
+        close(fd);
+        return -9;
+    }
+
+    close(fd);
+    return 0;
+}
+
+/*Confirms unregistration on node Server
+Write header at a later stage*/
+int unreg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *net) {
+    int fd, n, ret;
+    char buffer[BUFFER_SIZE];
+    char addrBuffer[INET_ADDRSTRLEN];
+
+    fd_set rfds;
+    struct timeval timeout;
+
+    socklen_t addrlen;
+
+    timeout.tv_usec = 0;
+    timeout.tv_sec = SEL_TIMEOUT;
+
+    //Opens UDP socket to connect to node server
+    fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd == -1) return fd;
+    
+    //send unregistration message to node server
+    sprintf(buffer, "UNREG %s %s %d", net, inet_ntop(AF_INET, &nodeSelf->sin_addr, addrBuffer, sizeof addrBuffer), ntohs(nodeSelf->sin_port));
+    n = sendto(fd, buffer, strlen(buffer), 0, (struct sockaddr *) nodeServer, sizeof(*nodeServer));
+    if (n != strlen(buffer)) {
+        close(fd);
+        return -2;
+    }
+
+    FD_ZERO(&rfds);
+    FD_SET(fd, &rfds);
+
+    //If the node server takes more than 3 secs to answer too bad
+    ret = select(fd + 1, &rfds, NULL, NULL, &timeout);
+    if (ret == 0) {
+        close(fd);
+        return -3;
+    } else if (ret == -1) {
+        close(fd);
+        return -1;
+    }
+
+    addrlen = sizeof(*nodeServer);
+    n = recvfrom(fd, buffer, BUFFER_SIZE - 1, 0, (struct sockaddr *) nodeServer, &addrlen);
+    if (n == -1) {
+        close(fd);
+        return -1;
+    }
+
+    buffer[n] = '\0';
+
+    if (strcmp(buffer, "OKUNREG")) {
         close(fd);
         return -9;
     }
