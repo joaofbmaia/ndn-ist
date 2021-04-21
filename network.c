@@ -8,16 +8,17 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include "defines.h"
+#include "neighbours.h"
 
 /*Executes command join
 Write complete header at a later stage*/
-int join(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, struct sockaddr_in *nodeExtern, struct sockaddr_in *recoveryNode, char *net, int *externFd, int *listeningFd) {
+int join(struct sockaddr_in *nodeServer, char *net, struct neighbours *neighbours) {
     int nodeListSize = 1;
     int err;
     struct sockaddr_in nodeList[MAX_LIST_SIZE];
 
     //gets node list from node server
-    if (!nodeExtern->sin_family) {  //if sin_family == 0, means nodeExtern has not been set. when set, sin_family = AF_INET
+    if (!neighbours->external.addrressInfo.sin_family) {  //if sin_family == 0, means nodeExtern has not been set. when set, sin_family = AF_INET (may have been set by join boot mode)
         nodeListSize = getNodeList(nodeServer, net, nodeList);
         if (nodeListSize < 0) {
             return nodeListSize;
@@ -26,15 +27,14 @@ int join(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, struct so
 
     //if the net is empty register the node as his own recovery and external node
     if (nodeListSize == 0) {
-        memcpy(nodeExtern, nodeSelf, sizeof *nodeSelf);
-        *externFd = -1;
-        memcpy(recoveryNode, nodeSelf, sizeof *nodeSelf);
+        neighbours->external.addrressInfo = neighbours->self.addrressInfo;
+        neighbours->recovery.addrressInfo = neighbours->self.addrressInfo;
 
     } else {
         //connects to external neighbour in the net
-        *externFd = connectToNodeExtern(nodeListSize, nodeList, nodeExtern);
-        if (*externFd < 0) {
-            return *externFd;
+        neighbours->external.fd = connectToNodeExtern(nodeListSize, nodeList, &neighbours->external.addrressInfo);
+        if (neighbours->external.fd < 0) {
+            return neighbours->external.fd;
         }
 
         //advertise messages to be implemented
@@ -42,29 +42,48 @@ int join(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, struct so
     }
     // outras macacadas que sejam necessárias
 
-    // abrir TCP server para alguem se poder ligar a ti
+    /*
 
-    err = reg(nodeSelf, nodeServer, net);
-    if(err) {
+    //opens TCP  server so other nodes can conncect to you
+    *listeningFd = socket(AF_INET, SOCK_STREAM, 0);
+    if(*listeningFd == -1) {
+        return *listeningFd;
+    }
+    //binds listening fd to the port in nodeSelf
+    err = bind(*listeningFd, (struct sockaddr *) nodeSelf, sizeof(*nodeSelf));
+    if(err == -1) {
+        return err;
+    }
+    //starts to listen 
+    err = listen(*listeningFd, 5);
+    if(err == -1) {
+        return err;
+    } 
+
+    */
+
+    // reisters with node server
+    err = reg(&neighbours->self.addrressInfo, nodeServer, net);
+    if (err) {
         return err;
     }
 
     return 0;
 }
 
-int leave(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, struct sockaddr_in *nodeExtern, struct sockaddr_in *recoveryNode, char *net, int *externFd, int *listeningFd) {
+int leave(struct sockaddr_in *nodeServer, char *net, struct neighbours *neighbours) {
     int err;
 
     // mandar mensagens de bye bye
     // fechar fds todos
-    
-    memset(nodeExtern, 0, sizeof *nodeExtern);
-    memset(recoveryNode, 0, sizeof *recoveryNode);
-    *externFd = -1;
-    *listeningFd = -1;
 
-    err = unreg(nodeSelf, nodeServer, net);
-    if(err) {
+    memset(&neighbours->external, 0, sizeof neighbours->external);
+    memset(&neighbours->recovery, 0, sizeof neighbours->recovery);
+    memset(neighbours->internal, 0, sizeof neighbours->internal);
+    neighbours->numberOfInternals = 0;
+
+    err = unreg(&neighbours->self.addrressInfo, nodeServer, net);
+    if (err) {
         return err;
     }
 
@@ -212,7 +231,7 @@ int reg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *net)
     //Opens UDP socket to connect to node server
     fd = socket(AF_INET, SOCK_DGRAM, 0);
     if (fd == -1) return fd;
-    
+
     //send registration message to node server
     sprintf(buffer, "REG %s %s %d", net, inet_ntop(AF_INET, &nodeSelf->sin_addr, addrBuffer, sizeof addrBuffer), ntohs(nodeSelf->sin_port));
     n = sendto(fd, buffer, strlen(buffer), 0, (struct sockaddr *) nodeServer, sizeof(*nodeServer));
@@ -270,7 +289,7 @@ int unreg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *ne
     //Opens UDP socket to connect to node server
     fd = socket(AF_INET, SOCK_DGRAM, 0);
     if (fd == -1) return fd;
-    
+
     //send unregistration message to node server
     sprintf(buffer, "UNREG %s %s %d", net, inet_ntop(AF_INET, &nodeSelf->sin_addr, addrBuffer, sizeof addrBuffer), ntohs(nodeSelf->sin_port));
     n = sendto(fd, buffer, strlen(buffer), 0, (struct sockaddr *) nodeServer, sizeof(*nodeServer));

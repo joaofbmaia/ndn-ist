@@ -7,14 +7,17 @@
 #include "commandCodes.h"
 #include "defines.h"
 #include "network.h"
+#include "neighbours.h"
 #include "validation.h"
+#include "utils.h"
 
 int main(int argc, char *argv[]) {
-    struct sockaddr_in nodeSelf, nodeServer, nodeExtern, recoveryNode;
-
+    struct sockaddr_in  nodeServer;
     fd_set rfds;
+
+    struct neighbours neighbours;
+
     int counter, command, maxfd, err;
-    int externFd, listeningFd;
     char buffer[BUFFER_SIZE];
     char net[BUFFER_SIZE], id[BUFFER_SIZE], name[BUFFER_SIZE];
 
@@ -25,11 +28,11 @@ int main(int argc, char *argv[]) {
 
     time_t t;
 
-    argumentParser(argc, argv, &nodeSelf, &nodeServer);
+    memset(&neighbours, 0, sizeof neighbours);
+    
+    argumentParser(argc, argv, &neighbours.self.addrressInfo, &nodeServer);
 
     srand((unsigned) time(&t));
-
-    memset(&nodeExtern, 0, sizeof nodeExtern);
 
     state = notRegistered;
     printf("> ");
@@ -39,18 +42,15 @@ int main(int argc, char *argv[]) {
 
         switch (state) {
             case notRegistered:
-                FD_SET(fileno(stdin), &rfds);
-                maxfd = fileno(stdin);
+                maxfd = setFds(&rfds, &neighbours);
                 break;
 
             case loneRegistered:
-                FD_SET(fileno(stdin), &rfds);
-                maxfd = fileno(stdin);
+                maxfd = setFds(&rfds, &neighbours);
                 break;
                 
             case registered:
-                FD_SET(fileno(stdin), &rfds);
-                maxfd = fileno(stdin);
+                maxfd = setFds(&rfds, &neighbours);
                 break;
             default:;
         }
@@ -60,20 +60,20 @@ int main(int argc, char *argv[]) {
         for (; counter > 0; counter--) {
             switch (state) {
                 case notRegistered:
-                    // Algtr quem escreveu no stdin
+                    // someone wrote in stdin
                     if (FD_ISSET(fileno(stdin), &rfds)) {
                         FD_CLR(fileno(stdin), &rfds);
                         fgets(buffer, 1024, stdin);
-                        command = commandParser(buffer, net, id, name, &nodeExtern);
+                        command = commandParser(buffer, net, id, name, &neighbours.external.addrressInfo);
                         switch (command) {
                             case CC_ERROR:
                                 break;
                             case CC_JOIN:
                                 printf("O gigante está entrando!\n");
-                                err = join(&nodeSelf, &nodeServer, &nodeExtern, &recoveryNode, net, &externFd, &listeningFd);
+                                err = join(&nodeServer, net, &neighbours);
                                 if (!err) {
                                     printf("O gigante já entrou!\n");
-                                    if (externFd == -1) {
+                                    if (neighbours.external.fd == 0) {
                                         printf("O gigante está sozinho :c\n");
                                         state = loneRegistered;
                                     } else {
@@ -86,7 +86,7 @@ int main(int argc, char *argv[]) {
                             case CC_JOINBOOT:
                                 //reg(char *net, char *id);
                                 printf("O gigante está entrando, mas sem consentimento\n");
-                                err = join(&nodeSelf, &nodeServer, &nodeExtern, &recoveryNode, net, &externFd, &listeningFd);
+                                err = join(&nodeServer, net, &neighbours);
                                 if (!err) {
                                     printf("O gigante já entrou!\n");
                                     state = registered;
@@ -109,17 +109,17 @@ int main(int argc, char *argv[]) {
                     }
                     break;
                 case loneRegistered:
-                    // Algtr quem escreveu no stdin
+                    // someone wrote in stdin
                     if (FD_ISSET(fileno(stdin), &rfds)) {
                         FD_CLR(fileno(stdin), &rfds);
                         fgets(buffer, 1024, stdin);
-                        command = commandParser(buffer, net, id, name, &nodeExtern);
+                        command = commandParser(buffer, net, id, name, &neighbours.external.addrressInfo);
                         switch (command) {
                             case CC_ERROR:
                                 break;
                             case CC_LEAVE:
                                 printf("O gigante está saindo\n");
-                                err = leave(&nodeSelf, &nodeServer, &nodeExtern, &recoveryNode, net, &externFd, &listeningFd);
+                                err = leave(&nodeServer, net, &neighbours);
                                 if (!err) {
                                     printf("O gigante já saiu!\n");
                                     state = notRegistered;
@@ -129,7 +129,7 @@ int main(int argc, char *argv[]) {
                                 break;
                             case CC_EXIT:
                                 printf("O gigante está saindo\n");
-                                err = leave(&nodeSelf, &nodeServer, &nodeExtern, &recoveryNode, net, &externFd, &listeningFd);
+                                err = leave(&nodeServer, net, &neighbours);
                                 if (!err) {
                                     printf("O gigante já saiu!\n");
                                     state = notRegistered;
@@ -148,19 +148,28 @@ int main(int argc, char *argv[]) {
                             fflush(stdout);
                         }
                     }
+                    /*
+                    if (FD_ISSET(listeningFd, &rfds)) {
+                        internFd[internCounter] = accept(listeningFd, (struct sockaddr *) &nodeSelf, sizeof(nodeSelf));
+                        if (internFd[internCounter] == -1) {
+                            printf("error: %d\n", err);
+                        }
+
+                    }
+                    */
                     break;
                     case registered:
-                    // Algtr quem escreveu no stdin
+                    // someone wrote in stdin
                     if (FD_ISSET(fileno(stdin), &rfds)) {
                         FD_CLR(fileno(stdin), &rfds);
                         fgets(buffer, 1024, stdin);
-                        command = commandParser(buffer, net, id, name, &nodeExtern);
+                        command = commandParser(buffer, net, id, name, &neighbours.external.addrressInfo);
                         switch (command) {
                             case CC_ERROR:
                                 break;
                             case CC_LEAVE:
                                 printf("O gigante está saindo\n");
-                                err = leave(&nodeSelf, &nodeServer, &nodeExtern, &recoveryNode, net, &externFd, &listeningFd);
+                                err = leave(&nodeServer, net, &neighbours);
                                 if (!err) {
                                     printf("O gigante já saiu!\n");
                                     state = notRegistered;
@@ -170,7 +179,7 @@ int main(int argc, char *argv[]) {
                                 break;
                             case CC_EXIT:
                                 printf("O gigante está saindo\n");
-                                err = leave(&nodeSelf, &nodeServer, &nodeExtern, &recoveryNode, net, &externFd, &listeningFd);
+                                err = leave(&nodeServer, net, &neighbours);
                                 if (!err) {
                                     printf("O gigante já saiu!\n");
                                     state = notRegistered;
