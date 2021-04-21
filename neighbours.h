@@ -2,14 +2,14 @@
 #define NEIGHBOURS_H
 
 #include <arpa/inet.h>
-#include"defines.h"
+#include "defines.h"
 
 /*Struct with node information
 Write complete header at a later stage*/
 struct node {
     int fd;
     struct sockaddr_in addrressInfo;
-    char readBuffer[BUFFER_SIZE]; 
+    char readBuffer[BUFFER_SIZE];
 };
 
 /*Struct with info about all relevant nodes
