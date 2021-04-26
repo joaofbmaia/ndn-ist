@@ -102,6 +102,23 @@ int main(int argc, char *argv[]) {
 
             case registered:
                 maxfd = setFds(&rfds, &neighbours);
+                for (int i = 0; i < neighbours.numberOfInternals; i++) {
+                    while ((message = getMessageFromBuffer(neighbours.internal[i].readBuffer))) {
+                        messageCode = messageParser(message, messageId, messageName, &messageAddrInfo);
+                        switch (messageCode) {
+                            case MC_NEW:
+                                err = newInternalHandler(&neighbours, i, &messageAddrInfo);
+                                if (err) {
+                                    printf("error: connection attempt from internal node failed\n");
+                                    changedState = 1;
+                                    break;
+                                }
+                                break;
+                            default:
+                                break;
+                        }
+                    }
+                }
                 break;
             default:;
         }
@@ -236,6 +253,9 @@ int main(int argc, char *argv[]) {
                                 printf("Sayonara!\n");
                                 state = goingOut;
                                 break;
+                            case CC_SHOWTOPOLOGY:
+                                showTopology(&neighbours);
+                                break;
                             default:
                                 printf("error: already joined network\n");
                         }
@@ -255,7 +275,6 @@ int main(int argc, char *argv[]) {
                         neighbours.numberOfInternals++;
                         state = loneRegistered;
                     }
-                    
 
                     //checks if any of the internal neighbours sent a message
                     for (int i = 0; i < neighbours.numberOfInternals; i++) {
@@ -295,6 +314,9 @@ int main(int argc, char *argv[]) {
                                 printf("Sayonara!\n");
                                 state = goingOut;
                                 break;
+                            case CC_SHOWTOPOLOGY:
+                                showTopology(&neighbours);
+                                break;
                             default:
                                 printf("error: already joined network\n");
                         }
@@ -302,6 +324,23 @@ int main(int argc, char *argv[]) {
                         if (state != goingOut) {
                             printf("> ");
                             fflush(stdout);
+                        }
+                    }
+                    //checks if anyone is trying to connect to the network
+                    if (FD_ISSET(neighbours.self.fd, &rfds)) {
+                        FD_CLR(neighbours.self.fd, &rfds);
+                        neighbours.internal[neighbours.numberOfInternals].fd = accept(neighbours.self.fd, &addr, &addrlen);
+                        if (neighbours.internal[neighbours.numberOfInternals].fd == -1) {
+                            printf("error: -1\n");
+                        }
+                        neighbours.numberOfInternals++;
+                    }
+
+                    //checks if any of the internal neighbours sent a message
+                    for (int i = 0; i < neighbours.numberOfInternals; i++) {
+                        if (FD_ISSET(neighbours.internal[i].fd, &rfds)) {
+                            FD_CLR(neighbours.internal[i].fd, &rfds);
+                            readTcpStreamToBuffer(neighbours.internal[i].fd, neighbours.internal[i].readBuffer, BUFFER_SIZE);
                         }
                     }
                     break;

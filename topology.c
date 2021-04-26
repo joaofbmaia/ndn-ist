@@ -100,14 +100,21 @@ Write complete header at a later stage*/
 int leave(struct sockaddr_in *nodeServer, char *net, struct neighbours *neighbours) {
     int err;
 
-    // mandar mensagens de bye bye
-    // fechar fds todos
+    //close fds
+    close(neighbours->self.fd);
+    close(neighbours->external.fd);
+    for (int i  = 0; i < neighbours->numberOfInternals; i++) {
+        close(neighbours->internal[i].fd);
+    }
 
+    //reset neighbours
     memset(&neighbours->external, 0, sizeof neighbours->external);
     memset(&neighbours->recovery, 0, sizeof neighbours->recovery);
     memset(neighbours->internal, 0, sizeof neighbours->internal);
+    neighbours->self.fd = 0;
     neighbours->numberOfInternals = 0;
 
+    //unregister from node server
     err = unreg(&neighbours->self.addrressInfo, nodeServer, net);
     if (err) {
         return err;
@@ -126,14 +133,37 @@ int loneNewInternalHandler(struct neighbours *neighbours, int internalIndex, str
 
     neighbours->internal[internalIndex].addrressInfo = *addrinfo;
 
+    //promotes this internal to external
     neighbours->external.addrressInfo = neighbours->internal[internalIndex].addrressInfo;
 
-    sprintf(writeBuffer, "EXTERN %s %d\n", inet_ntop(AF_INET, &addrinfo->sin_addr, addrBuffer, sizeof addrBuffer), ntohs(addrinfo->sin_port));
+    //sends n info as recovery node
+    sprintf(writeBuffer, "EXTERN %s %d\n", inet_ntop(AF_INET, &neighbours->external.addrressInfo.sin_addr, addrBuffer, sizeof addrBuffer), ntohs(neighbours->external.addrressInfo.sin_port));
 
     err = writeBufferToTcpStream(neighbours->internal[internalIndex].fd, writeBuffer);
 
     if (err) {
         memset(&neighbours->external.addrressInfo, 0, sizeof neighbours->external.addrressInfo);
+        /* close fd and remove node from internalNodes vector */
+    }
+
+    return err;
+}
+
+/*Processes NEW message in Register case
+Write complete header at a later stage*/
+int newInternalHandler(struct neighbours *neighbours, int internalIndex, struct sockaddr_in *addrinfo) {
+    char writeBuffer[BUFFER_SIZE];
+    char addrBuffer[INET_ADDRSTRLEN];
+
+    int err;
+
+    neighbours->internal[internalIndex].addrressInfo = *addrinfo;
+
+    sprintf(writeBuffer, "EXTERN %s %d\n", inet_ntop(AF_INET, &neighbours->external.addrressInfo.sin_addr, addrBuffer, sizeof addrBuffer), ntohs(neighbours->external.addrressInfo.sin_port));
+
+    err = writeBufferToTcpStream(neighbours->internal[internalIndex].fd, writeBuffer);
+
+    if (err) {
         /* close fd and remove node from internalNodes vector */
     }
 
@@ -157,13 +187,6 @@ int externMessageHandler(struct neighbours *neighbours, struct sockaddr_in *addr
     if (err) {
         return err;
     }
-
-    return 0;
-}
-
-/*Processes NEW message in Register case
-Write complete header at a later stage*/
-int newInternalHandler() {
 
     return 0;
 }
@@ -411,4 +434,11 @@ int unreg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *ne
 
     close(fd);
     return 0;
+}
+
+void showTopology(struct neighbours *neighbours) {
+    char addrBuffer[INET_ADDRSTRLEN];
+
+    printf("external node: %s:%d\n", inet_ntop(AF_INET, &neighbours->external.addrressInfo.sin_addr, addrBuffer, sizeof addrBuffer), ntohs(neighbours->external.addrressInfo.sin_port));
+    printf("recovery node: %s:%d\n", inet_ntop(AF_INET, &neighbours->recovery.addrressInfo.sin_addr, addrBuffer, sizeof addrBuffer), ntohs(neighbours->recovery.addrressInfo.sin_port));
 }

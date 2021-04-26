@@ -91,7 +91,7 @@ char *getMessageFromBuffer(char *buffer) {
     //if it finds a message it copies it and deletes it from buffer
     messageSize = newlineLocation - buffer + 1;
     strncpy(message, buffer, messageSize);
-    message[messageSize + 1] = '\0';
+    message[messageSize] = '\0';
 
     //remove message from buffer and copy remaining data in buffer to the beggining
     strcpy(temp, newlineLocation + 1);
