@@ -1,13 +1,13 @@
-#ifndef NETWORK_H
-#define NETWORK_H
+#ifndef TOPOLOGY_H
+#define TOPOLOGY_H
 
 #include <arpa/inet.h>
 #include "neighbours.h"
 
 int join(struct sockaddr_in *nodeServer, char *net, struct neighbours *neighbours);
 int leave(struct sockaddr_in *nodeServer, char *net, struct neighbours *neighbours);
-int connectToNodeExtern(int nodeListSize, struct sockaddr_in *nodeList, struct sockaddr_in *nodeExtern);
-int getNodeList(struct sockaddr_in *nodeServer, char *net, struct sockaddr_in *nodeList);
+int loneNewInternalHandler(struct neighbours *neighbours, int internalIndex, struct sockaddr_in *addrinfo);
+int externMessageHandler(struct neighbours *neighbours, struct sockaddr_in *addrinfo, struct sockaddr_in *nodeServer, char *net);
 int reg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *net);
 int unreg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *net);
 

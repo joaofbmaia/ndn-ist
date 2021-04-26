@@ -1,4 +1,4 @@
-#include "network.h"
+#include "topology.h"
 #include <arpa/inet.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,6 +9,11 @@
 #include <unistd.h>
 #include "defines.h"
 #include "neighbours.h"
+#include "utils.h"
+
+int openListener(struct neighbours *neighbours);
+int connectToNodeExtern(int nodeListSize, struct sockaddr_in *nodeList, struct neighbours *neighbours);
+int getNodeList(struct sockaddr_in *nodeServer, char *net, struct sockaddr_in *nodeList);
 
 /*Executes command join
 Write complete header at a later stage*/
@@ -16,6 +21,8 @@ int join(struct sockaddr_in *nodeServer, char *net, struct neighbours *neighbour
     int nodeListSize = 1;
     int err;
     struct sockaddr_in nodeList[MAX_LIST_SIZE];
+    char writeBuffer[BUFFER_SIZE];
+    char addrBuffer[INET_ADDRSTRLEN];
 
     //gets node list from node server
     if (!neighbours->external.addrressInfo.sin_family) {  //if sin_family == 0, means nodeExtern has not been set. when set, sin_family = AF_INET (may have been set by join boot mode)
@@ -30,47 +37,66 @@ int join(struct sockaddr_in *nodeServer, char *net, struct neighbours *neighbour
         neighbours->external.addrressInfo = neighbours->self.addrressInfo;
         neighbours->recovery.addrressInfo = neighbours->self.addrressInfo;
 
-    } else {
-        //connects to external neighbour in the net
-        neighbours->external.fd = connectToNodeExtern(nodeListSize, nodeList, &neighbours->external.addrressInfo);
-        if (neighbours->external.fd < 0) {
-            return neighbours->external.fd;
+        // starts listener
+        err = openListener(neighbours);
+        if (err) {
+            return err;
         }
 
-        //advertise messages to be implemented
-        // get recoveryNode
-    }
-    // outras macacadas que sejam necessárias
+        // registers with node server
+        err = reg(&neighbours->self.addrressInfo, nodeServer, net);
+        if (err) {
+            return err;
+        }
 
-    /*
+    } else {
+        //connects to external neighbour in the net
+        err = connectToNodeExtern(nodeListSize, nodeList, neighbours);
+        if (err) {
+            memset(&neighbours->external, 0, sizeof neighbours->external);
+            return err;
+        }
+
+        //creates buffer with message to be written
+        sprintf(writeBuffer, "NEW %s %d\n", inet_ntop(AF_INET, &neighbours->self.addrressInfo.sin_addr, addrBuffer, sizeof addrBuffer), ntohs(neighbours->self.addrressInfo.sin_port));
+
+        // send NEW
+        err = writeBufferToTcpStream(neighbours->external.fd, writeBuffer);
+
+        if (err) {
+            close(neighbours->external.fd);
+            memset(&neighbours->external, 0, sizeof neighbours->external);
+            return err;
+        }
+    }
+
+    return 0;
+}
+
+int openListener(struct neighbours *neighbours) {
+    int err;
 
     //opens TCP  server so other nodes can conncect to you
-    *listeningFd = socket(AF_INET, SOCK_STREAM, 0);
-    if(*listeningFd == -1) {
-        return *listeningFd;
+    neighbours->self.fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (neighbours->self.fd == -1) {
+        return neighbours->self.fd;
     }
     //binds listening fd to the port in nodeSelf
-    err = bind(*listeningFd, (struct sockaddr *) nodeSelf, sizeof(*nodeSelf));
-    if(err == -1) {
+    err = bind(neighbours->self.fd, (struct sockaddr *) &neighbours->self.addrressInfo, sizeof(neighbours->self.addrressInfo));
+    if (err == -1) {
         return err;
     }
-    //starts to listen 
-    err = listen(*listeningFd, 5);
-    if(err == -1) {
-        return err;
-    } 
-
-    */
-
-    // reisters with node server
-    err = reg(&neighbours->self.addrressInfo, nodeServer, net);
-    if (err) {
+    //starts to listen
+    err = listen(neighbours->self.fd, 5);
+    if (err == -1) {
         return err;
     }
 
     return 0;
 }
 
+/*Executes leave command
+Write complete header at a later stage*/
 int leave(struct sockaddr_in *nodeServer, char *net, struct neighbours *neighbours) {
     int err;
 
@@ -90,42 +116,96 @@ int leave(struct sockaddr_in *nodeServer, char *net, struct neighbours *neighbou
     return 0;
 }
 
+/*Processes NEW message in loneRegister case
+Write complete header at a later stage*/
+int loneNewInternalHandler(struct neighbours *neighbours, int internalIndex, struct sockaddr_in *addrinfo) {
+    char writeBuffer[BUFFER_SIZE];
+    char addrBuffer[INET_ADDRSTRLEN];
+
+    int err;
+
+    neighbours->internal[internalIndex].addrressInfo = *addrinfo;
+
+    neighbours->external.addrressInfo = neighbours->internal[internalIndex].addrressInfo;
+
+    sprintf(writeBuffer, "EXTERN %s %d\n", inet_ntop(AF_INET, &addrinfo->sin_addr, addrBuffer, sizeof addrBuffer), ntohs(addrinfo->sin_port));
+
+    err = writeBufferToTcpStream(neighbours->internal[internalIndex].fd, writeBuffer);
+
+    if (err) {
+        memset(&neighbours->external.addrressInfo, 0, sizeof neighbours->external.addrressInfo);
+        /* close fd and remove node from internalNodes vector */
+    }
+
+    return err;
+}
+
+int externMessageHandler(struct neighbours *neighbours, struct sockaddr_in *addrinfo, struct sockaddr_in *nodeServer, char *net) {
+    int err;
+
+    //set recovery info
+    neighbours->recovery.addrressInfo = *addrinfo;
+
+    // starts listener
+    err = openListener(neighbours);
+    if (err) {
+        return err;
+    }
+
+    // registers with node server
+    err = reg(&neighbours->self.addrressInfo, nodeServer, net);
+    if (err) {
+        return err;
+    }
+
+    return 0;
+}
+
+/*Processes NEW message in Register case
+Write complete header at a later stage*/
+int newInternalHandler() {
+
+    return 0;
+}
+
 /*Chooses node from node list and connects to external neighbour joining the net
-Return value: returns fd of the socket or error code
+Return value: returns error code
 Write complete header at a later stage */
-int connectToNodeExtern(int nodeListSize, struct sockaddr_in *nodeList, struct sockaddr_in *nodeExtern) {
+int connectToNodeExtern(int nodeListSize, struct sockaddr_in *nodeList, struct neighbours *neighbours) {
     int err, nodeIndex;
     int triesRemaining = MAX_CONNECT_ATTEMPTS;
 
-    int fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (fd == -1) return fd;
+    neighbours->external.fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (neighbours->external.fd == -1) return neighbours->external.fd;
 
     //If you want to join without choosing the node (join without boot)
-    if (!nodeExtern->sin_family) {  //if sin_family == 0, means nodeExtern has not been set. when set, sin_family = AF_INET
+    if (!neighbours->external.addrressInfo.sin_family) {  //if sin_family == 0, means nodeExtern has not been set. when set, sin_family = AF_INET
         err = -1;
         while (err && triesRemaining) {
             nodeIndex = rand() % nodeListSize;
-            err = connect(fd, (struct sockaddr *) &nodeList[nodeIndex], sizeof(nodeList[nodeIndex]));
+            err = connect(neighbours->external.fd, (struct sockaddr *) &nodeList[nodeIndex], sizeof(nodeList[nodeIndex]));
             triesRemaining--;
         }
+        //exceed number of tries
         if (err) {
-            close(fd);
+            close(neighbours->external.fd);
             return -7;
         }
 
         //saves external neigbour info
-        memcpy(nodeExtern, &nodeList[nodeIndex], sizeof *nodeExtern);
+        neighbours->external.addrressInfo = nodeList[nodeIndex];
 
         //else you connect with the specified node
     } else {
-        err = connect(fd, (struct sockaddr *) nodeExtern, sizeof(*nodeExtern));
+        err = connect(neighbours->external.fd, (struct sockaddr *) &neighbours->external.addrressInfo, sizeof(neighbours->external.addrressInfo));
+        //error connecting to the specified node
         if (err) {
-            close(fd);
+            close(neighbours->external.fd);
             return -8;
         }
     }
 
-    return fd;
+    return 0;
 }
 
 /*Gets node list from node server
@@ -186,6 +266,7 @@ int getNodeList(struct sockaddr_in *nodeServer, char *net, struct sockaddr_in *n
     if (sscanf(token, "%s %s", headerBuffer, netBuffer) != 2) {
         close(fd);
         return -4;
+
     } else if (strcmp("NODESLIST", headerBuffer) || strcmp(net, netBuffer)) {
         return -5;
     }
@@ -205,6 +286,8 @@ int getNodeList(struct sockaddr_in *nodeServer, char *net, struct sockaddr_in *n
             return -6;
         }
         nodeList[counter].sin_port = htons(port);
+
+        nodeList[counter].sin_family = AF_INET;
 
         counter++;
         token = strtok(NULL, "\n");
@@ -262,6 +345,7 @@ int reg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *net)
 
     buffer[n] = '\0';
 
+    //error in case of invalid response from node server
     if (strcmp(buffer, "OKREG")) {
         close(fd);
         return -9;

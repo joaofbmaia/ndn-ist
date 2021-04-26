@@ -1,14 +1,11 @@
-#include "validation.h"
+#include "parser.h"
 #include <arpa/inet.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "commandCodes.h"
 #include "defines.h"
-
-#define DEFAULT_REGUDP 59000
-#define DEFAULT_REGIP "193.136.138.142"
+#include "returnCodes.h"
 
 void argError(void);
 
@@ -119,7 +116,7 @@ int commandParser(char *buffer, char *net, char *id, char *name, struct sockaddr
                 fprintf(stderr, "%s", "usage: join net id [bootIP bootTCP]\n");
                 return CC_ERROR;
             }
-            nodeExtern->sin_port = port;
+            nodeExtern->sin_port = htons(port);
             nodeExtern->sin_family = AF_INET;
             return CC_JOINBOOT;
         } else {
@@ -178,4 +175,103 @@ int commandParser(char *buffer, char *net, char *id, char *name, struct sockaddr
     }
 
     return CC_ERROR;
+}
+
+int messageParser(char *buffer, char *id, char *name, struct sockaddr_in *addrinfo) {
+    char tokens[4][BUFFER_SIZE];
+    int tokenCount;
+
+    int port;
+
+    tokenCount = sscanf(buffer, "%s %s %s %s", tokens[0], tokens[1], tokens[2], tokens[3]);
+
+    if (tokenCount == EOF || tokenCount > 3) {
+        return MC_ERROR;
+    }
+
+    if (!strcmp(tokens[0], "NEW")) {
+        if (!inet_pton(AF_INET, tokens[1], &addrinfo->sin_addr)) {
+            return MC_ERROR;
+        }
+
+        if (sscanf(tokens[2], "%d", &port) != 1) {
+            return MC_ERROR;
+        }
+
+        if (port < 1 || port > 65536) {
+            return MC_ERROR;
+        }
+
+        addrinfo->sin_port = htons(port);
+        addrinfo->sin_family = AF_INET;
+
+        return MC_NEW;
+    }
+
+    if (!strcmp(tokens[0], "EXTERN")) {
+        if (!inet_pton(AF_INET, tokens[1], &addrinfo->sin_addr)) {
+            return MC_ERROR;
+        }
+
+        if (sscanf(tokens[2], "%d", &port) != 1) {
+            return MC_ERROR;
+        }
+
+        if (port < 1 || port > 65536) {
+            return MC_ERROR;
+        }
+
+        addrinfo->sin_port = htons(port);
+        addrinfo->sin_family = AF_INET;
+
+        return MC_EXTERN;
+    }
+
+    if (!strcmp(tokens[0], "ADVERTISE")) {
+        if (tokenCount > 2) {
+            return MC_ERROR;
+        }
+
+        strcpy(id, tokens[1]);
+
+        return MC_ADVERTISE;
+    }
+    if (!strcmp(tokens[0], "WITHDRAW")) {
+        if (tokenCount > 2) {
+            return MC_ERROR;
+        }
+
+        strcpy(id, tokens[1]);
+
+        return MC_WITHDRAW;
+    }
+    if (!strcmp(tokens[0], "INTEREST")) {
+        if (tokenCount > 2) {
+            return MC_ERROR;
+        }
+
+        strcpy(name, tokens[1]);
+
+        return MC_INTEREST;
+    }
+    if (!strcmp(tokens[0], "DATA")) {
+        if (tokenCount > 2) {
+            return MC_ERROR;
+        }
+
+        strcpy(name, tokens[1]);
+
+        return MC_DATA;
+    }
+    if (!strcmp(tokens[0], "NODATA")) {
+        if (tokenCount > 2) {
+            return MC_ERROR;
+        }
+
+        strcpy(name, tokens[1]);
+
+        return MC_NODATA;
+    }
+
+    return MC_ERROR;
 }
