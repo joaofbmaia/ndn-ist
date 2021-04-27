@@ -15,7 +15,7 @@ int main(int argc, char *argv[]) {
     struct sockaddr_in nodeServer;
     fd_set rfds;
 
-    struct neighbours neighbours;
+    static struct neighbours neighbours;
 
     int counter, commandCode, maxfd, err, messageCode;
     char buffer[BUFFER_SIZE];
@@ -71,6 +71,7 @@ int main(int argc, char *argv[]) {
                             state = notRegistered;
                             break;
                         }
+                        printf("O gigante já entrou!\n");
                         state = registered;
                         changedState = 1;
                         break;
@@ -218,6 +219,7 @@ int main(int argc, char *argv[]) {
                             fflush(stdout);
                         }
                     }
+                    //checks if external neighbour has sent a message
                     if (FD_ISSET(neighbours.external.fd, &rfds)) {
                         FD_CLR(neighbours.external.fd, &rfds);
                         readTcpStreamToBuffer(neighbours.external.fd, neighbours.external.readBuffer, BUFFER_SIZE);
@@ -334,6 +336,12 @@ int main(int argc, char *argv[]) {
                             printf("error: -1\n");
                         }
                         neighbours.numberOfInternals++;
+                    }
+
+                    //checks if external neighbour has sent a message
+                    if (FD_ISSET(neighbours.external.fd, &rfds)) {
+                        FD_CLR(neighbours.external.fd, &rfds);
+                        readTcpStreamToBuffer(neighbours.external.fd, neighbours.external.readBuffer, BUFFER_SIZE);
                     }
 
                     //checks if any of the internal neighbours sent a message
