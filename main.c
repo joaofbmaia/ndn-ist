@@ -27,6 +27,7 @@ int main(int argc, char *argv[]) {
     struct sockaddr addr;
 
     int changedState;
+    int printPrompt;
 
     enum { notRegistered,
            waitingExtern,
@@ -44,8 +45,7 @@ int main(int argc, char *argv[]) {
 
     state = notRegistered;
     changedState = 0;
-    printf("> ");
-    fflush(stdout);
+    printPrompt = 1;
     while (state != goingOut) {
         FD_ZERO(&rfds);
 
@@ -129,6 +129,12 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
+        if (printPrompt) {
+            printPrompt = 0;
+            printf("> ");
+            fflush(stdout);
+        }
+
         counter = select(maxfd + 1, &rfds, NULL, NULL, NULL);
         //if select goes wrong maybe put a message
         for (; counter > 0; counter--) {
@@ -176,10 +182,7 @@ int main(int argc, char *argv[]) {
                                 printf("error: network not joined\n");
                         }
 
-                        if (state != goingOut) {
-                            printf("> ");
-                            fflush(stdout);
-                        }
+                        printPrompt = 1;
                     }
                     break;
                 case waitingExtern:
@@ -214,10 +217,7 @@ int main(int argc, char *argv[]) {
                                 break;
                         }
 
-                        if (state != goingOut) {
-                            printf("> ");
-                            fflush(stdout);
-                        }
+                        printPrompt = 1;
                     }
                     //checks if external neighbour has sent a message
                     if (FD_ISSET(neighbours.external.fd, &rfds)) {
@@ -262,10 +262,7 @@ int main(int argc, char *argv[]) {
                                 printf("error: already joined network\n");
                         }
 
-                        if (state != goingOut) {
-                            printf("> ");
-                            fflush(stdout);
-                        }
+                        printPrompt = 1;
                     }
                     //checks if anyone is trying to connect to the network
                     if (FD_ISSET(neighbours.self.fd, &rfds)) {
@@ -323,10 +320,7 @@ int main(int argc, char *argv[]) {
                                 printf("error: already joined network\n");
                         }
 
-                        if (state != goingOut) {
-                            printf("> ");
-                            fflush(stdout);
-                        }
+                        printPrompt = 1;
                     }
                     //checks if anyone is trying to connect to the network
                     if (FD_ISSET(neighbours.self.fd, &rfds)) {

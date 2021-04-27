@@ -101,9 +101,15 @@ int leave(struct sockaddr_in *nodeServer, char *net, struct neighbours *neighbou
     int err;
 
     //close fds
-    close(neighbours->self.fd);
-    close(neighbours->external.fd);
-    for (int i  = 0; i < neighbours->numberOfInternals; i++) {
+    if (neighbours->self.fd > 0) {
+        close(neighbours->self.fd);
+    }
+
+    if (neighbours->external.fd > 0) {
+        close(neighbours->external.fd);
+    }
+
+    for (int i = 0; i < neighbours->numberOfInternals; i++) {
         close(neighbours->internal[i].fd);
     }
 
