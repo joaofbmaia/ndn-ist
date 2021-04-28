@@ -15,15 +15,16 @@ int main(int argc, char *argv[]) {
     struct sockaddr_in nodeServer;
     fd_set rfds;
 
+    // when declared as static, will be stored in data segmente, instead of stack. No more stack overflows 😎
     static struct neighbours neighbours;
 
-    int counter, commandCode, maxfd, err, messageCode;
+    int counter, commandCode, maxfd, err, messageCode, ret;
     char buffer[BUFFER_SIZE];
     char net[BUFFER_SIZE], id[BUFFER_SIZE], name[BUFFER_SIZE];
     char messageId[BUFFER_SIZE], messageName[BUFFER_SIZE];
     struct sockaddr_in messageAddrInfo;
     char *message;
-    socklen_t addrlen;
+    socklen_t addrlen = 0;
     struct sockaddr addr;
 
     int changedState;
@@ -33,6 +34,7 @@ int main(int argc, char *argv[]) {
            waitingExtern,
            loneRegistered,
            registered,
+           waitingRecovery,
            goingOut } state;
 
     time_t t;
@@ -222,7 +224,19 @@ int main(int argc, char *argv[]) {
                     //checks if external neighbour has sent a message
                     if (FD_ISSET(neighbours.external.fd, &rfds)) {
                         FD_CLR(neighbours.external.fd, &rfds);
-                        readTcpStreamToBuffer(neighbours.external.fd, neighbours.external.readBuffer, BUFFER_SIZE);
+                        ret = readTcpStreamToBuffer(neighbours.external.fd, neighbours.external.readBuffer, BUFFER_SIZE);
+                        if (ret == -1) {
+                            //read error occurred, better close connection
+                            printf("error: -1\n");
+                            closeExternal(&neighbours);
+                            state = notRegistered;
+                        }
+                        if (ret == 1) {
+                            //external neighbour closed connection on their side
+                            printf("error: external node terminated connection before sending recovery node\n");
+                            closeExternal(&neighbours);
+                            state = notRegistered;
+                        }
                     }
                     break;
                 case loneRegistered:
@@ -279,7 +293,16 @@ int main(int argc, char *argv[]) {
                     for (int i = 0; i < neighbours.numberOfInternals; i++) {
                         if (FD_ISSET(neighbours.internal[i].fd, &rfds)) {
                             FD_CLR(neighbours.internal[i].fd, &rfds);
-                            readTcpStreamToBuffer(neighbours.internal[i].fd, neighbours.internal[i].readBuffer, BUFFER_SIZE);
+                            ret = readTcpStreamToBuffer(neighbours.internal[i].fd, neighbours.internal[i].readBuffer, BUFFER_SIZE);
+                            if (ret == -1) {
+                                //read error occurred, better close connection
+                                printf("error: -1\n");
+                                closeInternal(i, &neighbours);
+                            }
+                            if (ret == 1) {
+                                //internal neighbour closed connection on their side
+                                closeInternal(i, &neighbours);
+                            }
                         }
                     }
                     break;
@@ -335,14 +358,86 @@ int main(int argc, char *argv[]) {
                     //checks if external neighbour has sent a message
                     if (FD_ISSET(neighbours.external.fd, &rfds)) {
                         FD_CLR(neighbours.external.fd, &rfds);
-                        readTcpStreamToBuffer(neighbours.external.fd, neighbours.external.readBuffer, BUFFER_SIZE);
+                        ret = readTcpStreamToBuffer(neighbours.external.fd, neighbours.external.readBuffer, BUFFER_SIZE);
+                        if (ret == -1) {
+                            //read error occurred, better close connection
+                            printf("error: -1\n");
+                            closeExternal(&neighbours);
+                            //if recovery node is itself
+                            if (neighbours.recovery.addrressInfo.sin_addr.s_addr == neighbours.self.addrressInfo.sin_addr.s_addr && neighbours.recovery.addrressInfo.sin_port == neighbours.self.addrressInfo.sin_port) {
+                                //if you are the only node remaining
+                                if(neighbours.numberOfInternals == 0){
+                                    neighbours.external.addrressInfo = neighbours.self.addrressInfo;
+                                    state = loneRegistered;
+                                    break;
+                                }
+                                promoteRandomInternalToExternal(&neighbours);
+                                broadcastExtern(&neighbours);
+                            } else {
+                                err = connectToRecovery(&neighbours);
+                                if (err = -10) {
+                                    printf("error: could not connect to recovery node. leaving.\n");
+                                    err = leave(&nodeServer, net, &neighbours);
+                                    if (!err) {
+                                        printf("O gigante já saiu!\n");
+                                    } else {
+                                        printf("error: %d\n", err);
+                                    }
+                                    state = notRegistered;
+                                    break;
+                                }
+                                state = waitingRecovery;
+                            }
+                        }
+                        if (ret == 1) {
+                            //external neighbour closed connection on their side
+                            printf("error: external node terminated connection before sending recovery node\n");
+                            closeExternal(&neighbours);
+                            //if recovery node is itself
+                            if (neighbours.recovery.addrressInfo.sin_addr.s_addr == neighbours.self.addrressInfo.sin_addr.s_addr && neighbours.recovery.addrressInfo.sin_port == neighbours.self.addrressInfo.sin_port) {
+                                //if you are the only node remaining
+                                if(neighbours.numberOfInternals == 0){
+                                    neighbours.external.addrressInfo = neighbours.self.addrressInfo;
+                                    state = loneRegistered;
+                                    break;
+                                }
+                                promoteRandomInternalToExternal(&neighbours);
+                                broadcastExtern(&neighbours);
+                            } else {
+                                err = connectToRecovery(&neighbours);
+                                if (err = -10) {
+                                    printf("error: could not connect to recovery node. leaving.\n");
+                                    err = leave(&nodeServer, net, &neighbours);
+                                    if (!err) {
+                                        printf("O gigante já saiu!\n");
+                                    } else {
+                                        printf("error: %d\n", err);
+                                    }
+                                    state = notRegistered;
+                                    break;
+                                }
+                                state = waitingRecovery;
+                            }
+                        }
                     }
 
                     //checks if any of the internal neighbours sent a message
                     for (int i = 0; i < neighbours.numberOfInternals; i++) {
                         if (FD_ISSET(neighbours.internal[i].fd, &rfds)) {
                             FD_CLR(neighbours.internal[i].fd, &rfds);
-                            readTcpStreamToBuffer(neighbours.internal[i].fd, neighbours.internal[i].readBuffer, BUFFER_SIZE);
+                            ret = readTcpStreamToBuffer(neighbours.internal[i].fd, neighbours.internal[i].readBuffer, BUFFER_SIZE);
+                            if (ret == -1) {
+                                //read error occurred, better close connection
+                                printf("error: -1\n");
+                                //verefy that internal is not also external node
+                                closeInternal(i, &neighbours);
+                                //send withdraw messages
+                            }
+                            if (ret == 1) {
+                                //internal neighbour closed connection on their side
+                                closeInternal(i, &neighbours);
+                                //send withdraw messages
+                            }
                         }
                     }
                     break;

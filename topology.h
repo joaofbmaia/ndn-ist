@@ -12,5 +12,10 @@ int externMessageHandler(struct neighbours *neighbours, struct sockaddr_in *addr
 int reg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *net);
 int unreg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *net);
 void showTopology(struct neighbours *neighbours);
+void closeInternal(int internalIndex, struct neighbours *neighbours);
+void closeExternal(struct neighbours *neighbours);
+void promoteRandomInternalToExternal(struct neighbours *neighbours);
+int broadcastExtern(struct neighbours *neighbours);
+int connectToRecovery(struct neighbours *neighbours);
 
 #endif

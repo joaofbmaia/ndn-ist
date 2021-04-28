@@ -2,7 +2,7 @@
 #define DEFINES_H
 
 //sizes subject to change
-#define BUFFER_SIZE 1024
+#define BUFFER_SIZE 4096
 #define SEL_TIMEOUT 3
 #define MAX_LIST_SIZE 512
 #define MAX_CONNECT_ATTEMPTS 10

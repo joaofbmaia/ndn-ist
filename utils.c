@@ -64,6 +64,9 @@ int readTcpStreamToBuffer(int fd, char *readBuffer, int bufferSize) {
     if (bytesRead == -1) {
         return -1;
     }
+    if (bytesRead = 0) {
+        return 1;
+    }
 
     //terminates string
     stringTerminatorLocation[bytesRead] = '\0';
@@ -98,4 +101,12 @@ char *getMessageFromBuffer(char *buffer) {
     strcpy(buffer, temp);
 
     return message;
+}
+
+void removeInternalFromTable(int internalIndex, struct neighbours *neighbours) {
+    for(int  i = internalIndex + 1; i < neighbours->numberOfInternals; i++) {
+        neighbours->internal[i - 1] = neighbours->internal[i];
+    }
+    memset(&neighbours->internal[neighbours->numberOfInternals - 1], 0, sizeof neighbours->internal[neighbours->numberOfInternals - 1]);
+    neighbours->numberOfInternals--;
 }

@@ -304,6 +304,7 @@ int getNodeList(struct sockaddr_in *nodeServer, char *net, struct sockaddr_in *n
     token = strtok(NULL, "\n");
     while (token != NULL) {
         ret = sscanf(token, "%s %d", ip, &port);
+        //error in function sscanf
         if (ret != 2) {
             return -6;
         }
@@ -355,8 +356,8 @@ int reg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *net)
     FD_ZERO(&rfds);
     FD_SET(fd, &rfds);
 
-    //If the node server takes more than 3 secs to answer
     ret = select(fd + 1, &rfds, NULL, NULL, &timeout);
+    //error in case node server takes more than 3 secs to respond
     if (ret == 0) {
         close(fd);
         return -3;
@@ -447,4 +448,68 @@ void showTopology(struct neighbours *neighbours) {
 
     printf("external node: %s:%d\n", inet_ntop(AF_INET, &neighbours->external.addrressInfo.sin_addr, addrBuffer, sizeof addrBuffer), ntohs(neighbours->external.addrressInfo.sin_port));
     printf("recovery node: %s:%d\n", inet_ntop(AF_INET, &neighbours->recovery.addrressInfo.sin_addr, addrBuffer, sizeof addrBuffer), ntohs(neighbours->recovery.addrressInfo.sin_port));
+}
+
+void closeInternal(int internalIndex, struct neighbours *neighbours) {
+    close(neighbours->internal[internalIndex].fd);
+    removeInternalFromTable(internalIndex, neighbours);
+}
+
+void closeExternal(struct neighbours *neighbours) {
+    close(neighbours->external.fd);
+    memset(&neighbours->external, 0, sizeof neighbours->external);
+}
+
+void promoteRandomInternalToExternal(struct neighbours *neighbours) {
+    int internalIndex = rand() % neighbours->numberOfInternals;
+    neighbours->external.addrressInfo = neighbours->internal[internalIndex].addrressInfo;
+}
+
+int broadcastExtern(struct neighbours *neighbours) {
+    char writeBuffer[BUFFER_SIZE];
+    char addrBuffer[INET_ADDRSTRLEN];
+
+    int err = 0;
+
+    sprintf(writeBuffer, "EXTERN %s %d\n", inet_ntop(AF_INET, &neighbours->external.addrressInfo.sin_addr, addrBuffer, sizeof addrBuffer), ntohs(neighbours->external.addrressInfo.sin_port));
+
+    for (int i = 0; i < neighbours->numberOfInternals; i++) {
+        err = writeBufferToTcpStream(neighbours->internal[i].fd, writeBuffer);
+
+        if (err) {
+            /* close fd and remove node from internalNodes vector */
+        }
+    }
+
+    return err;
+}
+
+int connectToRecovery(struct neighbours *neighbours) {
+    int err;
+    char writeBuffer[BUFFER_SIZE];
+    char addrBuffer[INET_ADDRSTRLEN];
+
+    neighbours->external.fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (neighbours->external.fd == -1) return neighbours->external.fd;
+
+    err = connect(neighbours->external.fd, (struct sockaddr *) &neighbours->recovery.addrressInfo, sizeof(neighbours->recovery.addrressInfo));
+    //error connecting to the recovery node
+    if (err) {
+        close(neighbours->external.fd);
+        return -10;
+    }
+
+    //creates buffer with message to be written
+    sprintf(writeBuffer, "NEW %s %d\n", inet_ntop(AF_INET, &neighbours->self.addrressInfo.sin_addr, addrBuffer, sizeof addrBuffer), ntohs(neighbours->self.addrressInfo.sin_port));
+
+    // send NEW
+    err = writeBufferToTcpStream(neighbours->external.fd, writeBuffer);
+
+    if (err) {
+        close(neighbours->external.fd);
+        memset(&neighbours->external, 0, sizeof neighbours->external);
+        return err;
+    }
+
+    return 0;
 }
