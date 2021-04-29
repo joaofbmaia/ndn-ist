@@ -64,7 +64,7 @@ int readTcpStreamToBuffer(int fd, char *readBuffer, int bufferSize) {
     if (bytesRead == -1) {
         return -1;
     }
-    if (bytesRead = 0) {
+    if (bytesRead == 0) {
         return 1;
     }
 

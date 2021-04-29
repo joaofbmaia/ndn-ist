@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include "defines.h"
 #include "neighbours.h"
+#include "states.h"
 #include "utils.h"
 
 int openListener(struct neighbours *neighbours);
@@ -176,7 +177,7 @@ int newInternalHandler(struct neighbours *neighbours, int internalIndex, struct 
     return err;
 }
 
-int externMessageHandler(struct neighbours *neighbours, struct sockaddr_in *addrinfo, struct sockaddr_in *nodeServer, char *net) {
+int finishJoin(struct neighbours *neighbours, struct sockaddr_in *addrinfo, struct sockaddr_in *nodeServer, char *net) {
     int err;
 
     //set recovery info
@@ -465,23 +466,28 @@ void promoteRandomInternalToExternal(struct neighbours *neighbours) {
     neighbours->external.addrressInfo = neighbours->internal[internalIndex].addrressInfo;
 }
 
-int broadcastExtern(struct neighbours *neighbours) {
+enum state broadcastExtern(enum state state, struct neighbours *neighbours) {
     char writeBuffer[BUFFER_SIZE];
     char addrBuffer[INET_ADDRSTRLEN];
 
-    int err = 0;
+    int err[MAX_LIST_SIZE];
+
+    enum state newState = state;
 
     sprintf(writeBuffer, "EXTERN %s %d\n", inet_ntop(AF_INET, &neighbours->external.addrressInfo.sin_addr, addrBuffer, sizeof addrBuffer), ntohs(neighbours->external.addrressInfo.sin_port));
 
     for (int i = 0; i < neighbours->numberOfInternals; i++) {
-        err = writeBufferToTcpStream(neighbours->internal[i].fd, writeBuffer);
+        err[i] = writeBufferToTcpStream(neighbours->internal[i].fd, writeBuffer);
+    }
 
-        if (err) {
+    for (int i = 0; i < neighbours->numberOfInternals; i++) {
+        if (err[i]) {
             /* close fd and remove node from internalNodes vector */
+            newState = neighbourDisconnectionHandler(state, i, neighbours);
         }
     }
 
-    return err;
+    return newState;
 }
 
 int connectToRecovery(struct neighbours *neighbours) {
@@ -492,11 +498,12 @@ int connectToRecovery(struct neighbours *neighbours) {
     neighbours->external.fd = socket(AF_INET, SOCK_STREAM, 0);
     if (neighbours->external.fd == -1) return neighbours->external.fd;
 
+    neighbours->external.addrressInfo = neighbours->recovery.addrressInfo;
+
     err = connect(neighbours->external.fd, (struct sockaddr *) &neighbours->recovery.addrressInfo, sizeof(neighbours->recovery.addrressInfo));
     //error connecting to the recovery node
     if (err) {
-        close(neighbours->external.fd);
-        return -10;
+        return -1;
     }
 
     //creates buffer with message to be written
@@ -506,10 +513,83 @@ int connectToRecovery(struct neighbours *neighbours) {
     err = writeBufferToTcpStream(neighbours->external.fd, writeBuffer);
 
     if (err) {
-        close(neighbours->external.fd);
-        memset(&neighbours->external, 0, sizeof neighbours->external);
         return err;
     }
 
     return 0;
+}
+
+enum state neighbourDisconnectionHandler(enum state state, int neighbourIndex, struct neighbours *neighbours) {
+    int err;
+    enum state newState = state;
+    switch (state) {
+        case registered:  //REG
+            if (neighbourIndex == -1) {
+                if (neighbours->recovery.addrressInfo.sin_addr.s_addr == neighbours->self.addrressInfo.sin_addr.s_addr && neighbours->recovery.addrressInfo.sin_port == neighbours->self.addrressInfo.sin_port) {
+                    // ROTINA 3
+                    closeExternal(neighbours);
+                    //if you are the only node remaining
+                    if (neighbours->numberOfInternals == 0) {
+                        neighbours->external.addrressInfo = neighbours->self.addrressInfo;
+                        return loneRegistered;  // goto state LONEREG
+                    }
+                    promoteRandomInternalToExternal(neighbours);
+                    newState = broadcastExtern(state, neighbours);
+                    //inform routing layer about neighbour disconnection
+                    return newState;
+                } else {
+                    // ROTINA 4
+                    err = connectToRecovery(neighbours);
+                    if (err) {
+                        return notRegistered;  // leave and go to state notReg
+                    }
+                    return waitingRecovery;  //goto WAITREC
+                }
+            } else {
+                if (neighbours->internal[neighbourIndex].addrressInfo.sin_addr.s_addr == neighbours->external.addrressInfo.sin_addr.s_addr && neighbours->internal[neighbourIndex].addrressInfo.sin_port == neighbours->external.addrressInfo.sin_port) {
+                    // ROTINA 2
+                    closeInternal(neighbourIndex, neighbours);
+                    //if you are the only node remaining
+                    if (neighbours->numberOfInternals == 0) {
+                        neighbours->external.addrressInfo = neighbours->self.addrressInfo;
+                        return loneRegistered;  // goto state LONEREG
+                    }
+                    promoteRandomInternalToExternal(neighbours);
+                    newState = broadcastExtern(state, neighbours);
+                    //inform routing layer about neighbour disconnection
+                    return newState;
+                } else {
+                    // ROTINA 1
+                    closeInternal(neighbourIndex, neighbours);
+                    //inform routing layer about neighbour disconnection
+                    return registered;  // goto state REG
+                }
+            }
+            break;
+
+        case loneRegistered:  //LONEREG
+            // ROTINA 1
+            closeInternal(neighbourIndex, neighbours);
+            return loneRegistered;  // goto state LONEREG
+            break;
+
+        case waitingRecovery:  //WAITREC
+            if (neighbourIndex == -1) {
+                return notRegistered;  // leave and go to state notReg
+            } else {
+                // ROTINA 1
+                closeInternal(neighbourIndex, neighbours);
+                //inform routing layer about neighbour disconnection
+                return waitingRecovery;  // goto state WAITREC
+            }
+            break;
+
+        default:
+            break;
+    }
+    return notRegistered;
+}
+
+void externMessageHandler(struct neighbours *neighbours, struct sockaddr_in *addrinfo) {
+    neighbours->recovery.addrressInfo = *addrinfo;
 }

@@ -8,6 +8,7 @@
 #include "neighbours.h"
 #include "parser.h"
 #include "returnCodes.h"
+#include "states.h"
 #include "topology.h"
 #include "utils.h"
 
@@ -30,12 +31,7 @@ int main(int argc, char *argv[]) {
     int changedState;
     int printPrompt;
 
-    enum { notRegistered,
-           waitingExtern,
-           loneRegistered,
-           registered,
-           waitingRecovery,
-           goingOut } state;
+    enum state state;
 
     time_t t;
 
@@ -62,7 +58,7 @@ int main(int argc, char *argv[]) {
                 if (message) {
                     messageCode = messageParser(message, messageId, messageName, &messageAddrInfo);
                     if (messageCode == MC_EXTERN) {
-                        err = externMessageHandler(&neighbours, &messageAddrInfo, &nodeServer, net);
+                        err = finishJoin(&neighbours, &messageAddrInfo, &nodeServer, net);
                         if (err) {
                             changedState = 1;
                             err = leave(&nodeServer, net, &neighbours);
@@ -105,6 +101,19 @@ int main(int argc, char *argv[]) {
 
             case registered:
                 maxfd = setFds(&rfds, &neighbours);
+
+                message = getMessageFromBuffer(neighbours.external.readBuffer);
+                if (message) {
+                    messageCode = messageParser(message, messageId, messageName, &messageAddrInfo);
+                    switch (messageCode) {
+                        case MC_EXTERN:
+                            externMessageHandler(&neighbours, &messageAddrInfo);
+                            break;
+                        default:
+                            break;
+                    }
+                }
+
                 for (int i = 0; i < neighbours.numberOfInternals; i++) {
                     while ((message = getMessageFromBuffer(neighbours.internal[i].readBuffer))) {
                         messageCode = messageParser(message, messageId, messageName, &messageAddrInfo);
@@ -117,6 +126,57 @@ int main(int argc, char *argv[]) {
                                     break;
                                 }
                                 break;
+
+                            default:
+                                break;
+                        }
+                    }
+                }
+                break;
+            case waitingRecovery:
+                maxfd = setFds(&rfds, &neighbours);
+
+                message = getMessageFromBuffer(neighbours.external.readBuffer);
+                if (message) {
+                    messageCode = messageParser(message, messageId, messageName, &messageAddrInfo);
+                    switch (messageCode) {
+                        case MC_EXTERN:
+                            externMessageHandler(&neighbours, &messageAddrInfo);
+                            state = broadcastExtern(registered, &neighbours);
+                            if (state == notRegistered) {
+                                printf("smthing wong\n");
+                                err = leave(&nodeServer, net, &neighbours);
+                                if (!err) {
+                                    printf("O gigante já saiu!\n");
+                                } else {
+                                    printf("error: %d\n", err);
+                                }
+                                break;
+                            }
+                            changedState = 1;
+                            break;
+                        default:
+                            break;
+                    }
+
+                    if (changedState) {
+                        break;
+                    }
+                }
+
+                for (int i = 0; i < neighbours.numberOfInternals; i++) {
+                    while ((message = getMessageFromBuffer(neighbours.internal[i].readBuffer))) {
+                        messageCode = messageParser(message, messageId, messageName, &messageAddrInfo);
+                        switch (messageCode) {
+                            case MC_NEW:
+                                err = newInternalHandler(&neighbours, i, &messageAddrInfo);
+                                if (err) {
+                                    printf("error: connection attempt from internal node failed\n");
+                                    changedState = 1;
+                                    break;
+                                }
+                                break;
+
                             default:
                                 break;
                         }
@@ -228,13 +288,23 @@ int main(int argc, char *argv[]) {
                         if (ret == -1) {
                             //read error occurred, better close connection
                             printf("error: -1\n");
-                            closeExternal(&neighbours);
+                            err = leave(&nodeServer, net, &neighbours);
+                            if (!err) {
+                                printf("O gigante já saiu!\n");
+                            } else {
+                                printf("error: %d\n", err);
+                            }
                             state = notRegistered;
                         }
                         if (ret == 1) {
                             //external neighbour closed connection on their side
                             printf("error: external node terminated connection before sending recovery node\n");
-                            closeExternal(&neighbours);
+                            err = leave(&nodeServer, net, &neighbours);
+                            if (!err) {
+                                printf("O gigante já saiu!\n");
+                            } else {
+                                printf("error: %d\n", err);
+                            }
                             state = notRegistered;
                         }
                     }
@@ -294,18 +364,26 @@ int main(int argc, char *argv[]) {
                         if (FD_ISSET(neighbours.internal[i].fd, &rfds)) {
                             FD_CLR(neighbours.internal[i].fd, &rfds);
                             ret = readTcpStreamToBuffer(neighbours.internal[i].fd, neighbours.internal[i].readBuffer, BUFFER_SIZE);
-                            if (ret == -1) {
-                                //read error occurred, better close connection
-                                printf("error: -1\n");
-                                closeInternal(i, &neighbours);
-                            }
-                            if (ret == 1) {
-                                //internal neighbour closed connection on their side
-                                closeInternal(i, &neighbours);
+                            if (ret) {
+                                if (ret == -1) {
+                                    printf("error: -1\n");
+                                }
+                                state = neighbourDisconnectionHandler(loneRegistered, i, &neighbours);
+                                if (state == notRegistered) {
+                                    printf("smthing wong\n");
+                                    err = leave(&nodeServer, net, &neighbours);
+                                    if (!err) {
+                                        printf("O gigante já saiu!\n");
+                                    } else {
+                                        printf("error: %d\n", err);
+                                    }
+                                    break;
+                                }
                             }
                         }
                     }
                     break;
+                case waitingRecovery:
                 case registered:
                     // someone wrote in stdin
                     if (FD_ISSET(fileno(stdin), &rfds)) {
@@ -359,64 +437,20 @@ int main(int argc, char *argv[]) {
                     if (FD_ISSET(neighbours.external.fd, &rfds)) {
                         FD_CLR(neighbours.external.fd, &rfds);
                         ret = readTcpStreamToBuffer(neighbours.external.fd, neighbours.external.readBuffer, BUFFER_SIZE);
-                        if (ret == -1) {
-                            //read error occurred, better close connection
-                            printf("error: -1\n");
-                            closeExternal(&neighbours);
-                            //if recovery node is itself
-                            if (neighbours.recovery.addrressInfo.sin_addr.s_addr == neighbours.self.addrressInfo.sin_addr.s_addr && neighbours.recovery.addrressInfo.sin_port == neighbours.self.addrressInfo.sin_port) {
-                                //if you are the only node remaining
-                                if(neighbours.numberOfInternals == 0){
-                                    neighbours.external.addrressInfo = neighbours.self.addrressInfo;
-                                    state = loneRegistered;
-                                    break;
-                                }
-                                promoteRandomInternalToExternal(&neighbours);
-                                broadcastExtern(&neighbours);
-                            } else {
-                                err = connectToRecovery(&neighbours);
-                                if (err = -10) {
-                                    printf("error: could not connect to recovery node. leaving.\n");
-                                    err = leave(&nodeServer, net, &neighbours);
-                                    if (!err) {
-                                        printf("O gigante já saiu!\n");
-                                    } else {
-                                        printf("error: %d\n", err);
-                                    }
-                                    state = notRegistered;
-                                    break;
-                                }
-                                state = waitingRecovery;
+                        if (ret) {
+                            if (ret == -1) {
+                                printf("error: -1\n");
                             }
-                        }
-                        if (ret == 1) {
-                            //external neighbour closed connection on their side
-                            printf("error: external node terminated connection before sending recovery node\n");
-                            closeExternal(&neighbours);
-                            //if recovery node is itself
-                            if (neighbours.recovery.addrressInfo.sin_addr.s_addr == neighbours.self.addrressInfo.sin_addr.s_addr && neighbours.recovery.addrressInfo.sin_port == neighbours.self.addrressInfo.sin_port) {
-                                //if you are the only node remaining
-                                if(neighbours.numberOfInternals == 0){
-                                    neighbours.external.addrressInfo = neighbours.self.addrressInfo;
-                                    state = loneRegistered;
-                                    break;
+                            state = neighbourDisconnectionHandler(state, -1, &neighbours);
+                            if (state == notRegistered) {
+                                printf("smthing wong\n");
+                                err = leave(&nodeServer, net, &neighbours);
+                                if (!err) {
+                                    printf("O gigante já saiu!\n");
+                                } else {
+                                    printf("error: %d\n", err);
                                 }
-                                promoteRandomInternalToExternal(&neighbours);
-                                broadcastExtern(&neighbours);
-                            } else {
-                                err = connectToRecovery(&neighbours);
-                                if (err = -10) {
-                                    printf("error: could not connect to recovery node. leaving.\n");
-                                    err = leave(&nodeServer, net, &neighbours);
-                                    if (!err) {
-                                        printf("O gigante já saiu!\n");
-                                    } else {
-                                        printf("error: %d\n", err);
-                                    }
-                                    state = notRegistered;
-                                    break;
-                                }
-                                state = waitingRecovery;
+                                break;
                             }
                         }
                     }
@@ -426,21 +460,26 @@ int main(int argc, char *argv[]) {
                         if (FD_ISSET(neighbours.internal[i].fd, &rfds)) {
                             FD_CLR(neighbours.internal[i].fd, &rfds);
                             ret = readTcpStreamToBuffer(neighbours.internal[i].fd, neighbours.internal[i].readBuffer, BUFFER_SIZE);
-                            if (ret == -1) {
-                                //read error occurred, better close connection
-                                printf("error: -1\n");
-                                //verefy that internal is not also external node
-                                closeInternal(i, &neighbours);
-                                //send withdraw messages
-                            }
-                            if (ret == 1) {
-                                //internal neighbour closed connection on their side
-                                closeInternal(i, &neighbours);
-                                //send withdraw messages
+                            if (ret) {
+                                if (ret == -1) {
+                                    printf("error: -1\n");
+                                }
+                                state = neighbourDisconnectionHandler(state, i, &neighbours);
+                                if (state == notRegistered) {
+                                    printf("smthing wong\n");
+                                    err = leave(&nodeServer, net, &neighbours);
+                                    if (!err) {
+                                        printf("O gigante já saiu!\n");
+                                    } else {
+                                        printf("error: %d\n", err);
+                                    }
+                                    break;
+                                }
                             }
                         }
                     }
                     break;
+                    
                 default:;
             }
         }
