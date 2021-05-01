@@ -1,4 +1,6 @@
 #include <arpa/inet.h>
+#include <errno.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,6 +10,7 @@
 #include "neighbours.h"
 #include "parser.h"
 #include "returnCodes.h"
+#include "routing.h"
 #include "states.h"
 #include "topology.h"
 #include "utils.h"
@@ -16,12 +19,16 @@ int main(int argc, char *argv[]) {
     struct sockaddr_in nodeServer;
     fd_set rfds;
 
-    // when declared as static, will be stored in data segmente, instead of stack. No more stack overflows 😎
+    // when declared as static variable will be stored in data segment, instead of stack. No more stack overflows 😎
     static struct neighbours neighbours;
+    static struct routingTable routingTable;
 
     int counter, commandCode, maxfd, err, messageCode, ret;
     char buffer[BUFFER_SIZE];
-    char net[BUFFER_SIZE], id[BUFFER_SIZE], name[BUFFER_SIZE];
+    char net[BUFFER_SIZE], id[BUFFER_SIZE];
+
+    char commandName[BUFFER_SIZE], commandNet[BUFFER_SIZE], commandId[BUFFER_SIZE];
+    struct sockaddr_in commandAddrInfo;
     char messageId[BUFFER_SIZE], messageName[BUFFER_SIZE];
     struct sockaddr_in messageAddrInfo;
     char *message;
@@ -34,6 +41,14 @@ int main(int argc, char *argv[]) {
     enum state state;
 
     time_t t;
+
+    struct sigaction act;
+
+    memset(&act, 0, sizeof act);
+    act.sa_handler = SIG_IGN;
+    if (sigaction(SIGPIPE, &act, NULL) == -1) {
+        fprintf(stderr, "error: %s\n", strerror(errno));
+    }
 
     memset(&neighbours, 0, sizeof neighbours);
 
@@ -61,7 +76,7 @@ int main(int argc, char *argv[]) {
                         err = finishJoin(&neighbours, &messageAddrInfo, &nodeServer, net);
                         if (err) {
                             changedState = 1;
-                            err = leave(&nodeServer, net, &neighbours);
+                            err = leave(&nodeServer, net, &neighbours, &routingTable);
                             if (err) {
                                 printf("Erro no unreg do servidor de nós\n");
                             }
@@ -71,6 +86,11 @@ int main(int argc, char *argv[]) {
                         }
                         printf("O gigante já entrou!\n");
                         state = registered;
+                        //send ADVERTISE messages
+                        err = advertiseToEdge(neighbours.external.fd, &routingTable);
+                        if (err) {
+                            state = neighbourDisconnectionHandler(registered, -1, &neighbours);
+                        }
                         changedState = 1;
                         break;
                     }
@@ -87,7 +107,14 @@ int main(int argc, char *argv[]) {
                         if (messageCode == MC_NEW) {
                             err = loneNewInternalHandler(&neighbours, i, &messageAddrInfo);
                             if (err) {
-                                state = loneRegistered;
+                                state = neighbourDisconnectionHandler(loneRegistered, i, &neighbours);
+                                changedState = 1;
+                                break;
+                            }
+                            //send ADVERTISE messages
+                            err = advertiseToEdge(neighbours.internal[i].fd, &routingTable);
+                            if (err) {
+                                state = neighbourDisconnectionHandler(loneRegistered, i, &neighbours);
                                 changedState = 1;
                                 break;
                             }
@@ -109,9 +136,18 @@ int main(int argc, char *argv[]) {
                         case MC_EXTERN:
                             externMessageHandler(&neighbours, &messageAddrInfo);
                             break;
+                        case MC_ADVERTISE:
+                            addNodeToRoutingTable(neighbours.external.fd, messageId, &routingTable);
+                            state = broadcastAdvertise(neighbours.external.fd, messageId, &routingTable, registered, &neighbours);
+                            changedState = 1;
+                            break;
                         default:
                             break;
                     }
+                }
+
+                if (changedState) {
+                    break;
                 }
 
                 for (int i = 0; i < neighbours.numberOfInternals; i++) {
@@ -121,10 +157,23 @@ int main(int argc, char *argv[]) {
                             case MC_NEW:
                                 err = newInternalHandler(&neighbours, i, &messageAddrInfo);
                                 if (err) {
-                                    printf("error: connection attempt from internal node failed\n");
+                                    state = neighbourDisconnectionHandler(registered, i, &neighbours);
                                     changedState = 1;
                                     break;
                                 }
+                                //send ADVERTISE messages
+                                err = advertiseToEdge(neighbours.internal[i].fd, &routingTable);
+                                if (err) {
+                                    state = neighbourDisconnectionHandler(registered, i, &neighbours);
+                                    changedState = 1;
+                                    break;
+                                }
+                                break;
+
+                            case MC_ADVERTISE:
+                                addNodeToRoutingTable(neighbours.internal[i].fd, messageId, &routingTable);
+                                state = broadcastAdvertise(neighbours.internal[i].fd, messageId, &routingTable, registered, &neighbours);
+                                changedState = 1;
                                 break;
 
                             default:
@@ -143,9 +192,14 @@ int main(int argc, char *argv[]) {
                         case MC_EXTERN:
                             externMessageHandler(&neighbours, &messageAddrInfo);
                             state = broadcastExtern(registered, &neighbours);
+                            //send ADVERTISE messages
+                            err = advertiseToEdge(neighbours.external.fd, &routingTable);
+                            if (err) {
+                                state = neighbourDisconnectionHandler(registered, -1, &neighbours);
+                            }
                             if (state == notRegistered) {
                                 printf("smthing wong\n");
-                                err = leave(&nodeServer, net, &neighbours);
+                                err = leave(&nodeServer, net, &neighbours, &routingTable);
                                 if (!err) {
                                     printf("O gigante já saiu!\n");
                                 } else {
@@ -153,6 +207,11 @@ int main(int argc, char *argv[]) {
                                 }
                                 break;
                             }
+                            changedState = 1;
+                            break;
+                        case MC_ADVERTISE:
+                            addNodeToRoutingTable(neighbours.external.fd, messageId, &routingTable);
+                            state = broadcastAdvertise(neighbours.external.fd, messageId, &routingTable, registered, &neighbours);
                             changedState = 1;
                             break;
                         default:
@@ -175,6 +234,12 @@ int main(int argc, char *argv[]) {
                                     changedState = 1;
                                     break;
                                 }
+                                break;
+
+                            case MC_ADVERTISE:
+                                addNodeToRoutingTable(neighbours.external.fd, messageId, &routingTable);
+                                state = broadcastAdvertise(neighbours.external.fd, messageId, &routingTable, registered, &neighbours);
+                                changedState = 1;
                                 break;
 
                             default:
@@ -206,13 +271,16 @@ int main(int argc, char *argv[]) {
                     if (FD_ISSET(fileno(stdin), &rfds)) {
                         FD_CLR(fileno(stdin), &rfds);
                         fgets(buffer, 1024, stdin);
-                        commandCode = commandParser(buffer, net, id, name, &neighbours.external.addrressInfo);
+                        commandCode = commandParser(buffer, commandNet, commandId, commandName, &commandAddrInfo);
                         switch (commandCode) {
                             case CC_ERROR:
                                 break;
                             case CC_JOIN:
+                                strcpy(net, commandNet);
+                                strcpy(id, commandId);
+                                neighbours.external.addrressInfo = commandAddrInfo;
                                 printf("O gigante está entrando!\n");
-                                err = join(&nodeServer, net, &neighbours);
+                                err = join(&nodeServer, net, &neighbours, id, &routingTable);
                                 if (!err) {
                                     if (neighbours.external.fd == 0) {
                                         printf("O gigante já entrou!\n");
@@ -226,8 +294,11 @@ int main(int argc, char *argv[]) {
                                 }
                                 break;
                             case CC_JOINBOOT:
+                                strcpy(net, commandNet);
+                                strcpy(id, commandId);
+                                neighbours.external.addrressInfo = commandAddrInfo;
                                 printf("O gigante está entrando, mas sem consentimento\n");
-                                err = join(&nodeServer, net, &neighbours);
+                                err = join(&nodeServer, net, &neighbours, id, &routingTable);
                                 if (!err) {
                                     state = waitingExtern;
                                 } else {
@@ -252,13 +323,13 @@ int main(int argc, char *argv[]) {
                     if (FD_ISSET(fileno(stdin), &rfds)) {
                         FD_CLR(fileno(stdin), &rfds);
                         fgets(buffer, 1024, stdin);
-                        commandCode = commandParser(buffer, net, id, name, &neighbours.external.addrressInfo);
+                        commandCode = commandParser(buffer, commandNet, commandId, commandName, &commandAddrInfo);
                         switch (commandCode) {
                             case CC_ERROR:
                                 break;
                             case CC_LEAVE:
                                 printf("O gigante está saindo\n");
-                                err = leave(&nodeServer, net, &neighbours);
+                                err = leave(&nodeServer, net, &neighbours, &routingTable);
                                 if (!err) {
                                     printf("O gigante já saiu!\n");
                                 } else {
@@ -268,7 +339,7 @@ int main(int argc, char *argv[]) {
                                 break;
                             case CC_EXIT:
                                 printf("O gigante está saindo\n");
-                                err = leave(&nodeServer, net, &neighbours);
+                                err = leave(&nodeServer, net, &neighbours, &routingTable);
                                 if (!err) {
                                     printf("O gigante já saiu!\n");
                                 } else {
@@ -288,7 +359,7 @@ int main(int argc, char *argv[]) {
                         if (ret == -1) {
                             //read error occurred, better close connection
                             printf("error: -1\n");
-                            err = leave(&nodeServer, net, &neighbours);
+                            err = leave(&nodeServer, net, &neighbours, &routingTable);
                             if (!err) {
                                 printf("O gigante já saiu!\n");
                             } else {
@@ -299,7 +370,7 @@ int main(int argc, char *argv[]) {
                         if (ret == 1) {
                             //external neighbour closed connection on their side
                             printf("error: external node terminated connection before sending recovery node\n");
-                            err = leave(&nodeServer, net, &neighbours);
+                            err = leave(&nodeServer, net, &neighbours, &routingTable);
                             if (!err) {
                                 printf("O gigante já saiu!\n");
                             } else {
@@ -314,13 +385,13 @@ int main(int argc, char *argv[]) {
                     if (FD_ISSET(fileno(stdin), &rfds)) {
                         FD_CLR(fileno(stdin), &rfds);
                         fgets(buffer, 1024, stdin);
-                        commandCode = commandParser(buffer, net, id, name, &neighbours.external.addrressInfo);
+                        commandCode = commandParser(buffer, commandNet, commandId, commandName, &commandAddrInfo);
                         switch (commandCode) {
                             case CC_ERROR:
                                 break;
                             case CC_LEAVE:
                                 printf("O gigante está saindo\n");
-                                err = leave(&nodeServer, net, &neighbours);
+                                err = leave(&nodeServer, net, &neighbours, &routingTable);
                                 if (!err) {
                                     printf("O gigante já saiu!\n");
                                 } else {
@@ -330,7 +401,7 @@ int main(int argc, char *argv[]) {
                                 break;
                             case CC_EXIT:
                                 printf("O gigante está saindo\n");
-                                err = leave(&nodeServer, net, &neighbours);
+                                err = leave(&nodeServer, net, &neighbours, &routingTable);
                                 if (!err) {
                                     printf("O gigante já saiu!\n");
                                 } else {
@@ -341,6 +412,9 @@ int main(int argc, char *argv[]) {
                                 break;
                             case CC_SHOWTOPOLOGY:
                                 showTopology(&neighbours);
+                                break;
+                            case CC_SHOWROUTING:
+                                showRouting(&routingTable);
                                 break;
                             default:
                                 printf("error: already joined network\n");
@@ -371,7 +445,7 @@ int main(int argc, char *argv[]) {
                                 state = neighbourDisconnectionHandler(loneRegistered, i, &neighbours);
                                 if (state == notRegistered) {
                                     printf("smthing wong\n");
-                                    err = leave(&nodeServer, net, &neighbours);
+                                    err = leave(&nodeServer, net, &neighbours, &routingTable);
                                     if (!err) {
                                         printf("O gigante já saiu!\n");
                                     } else {
@@ -389,13 +463,13 @@ int main(int argc, char *argv[]) {
                     if (FD_ISSET(fileno(stdin), &rfds)) {
                         FD_CLR(fileno(stdin), &rfds);
                         fgets(buffer, 1024, stdin);
-                        commandCode = commandParser(buffer, net, id, name, &neighbours.external.addrressInfo);
+                        commandCode = commandParser(buffer, commandNet, commandId, commandName, &commandAddrInfo);
                         switch (commandCode) {
                             case CC_ERROR:
                                 break;
                             case CC_LEAVE:
                                 printf("O gigante está saindo\n");
-                                err = leave(&nodeServer, net, &neighbours);
+                                err = leave(&nodeServer, net, &neighbours, &routingTable);
                                 if (!err) {
                                     printf("O gigante já saiu!\n");
                                 } else {
@@ -405,7 +479,7 @@ int main(int argc, char *argv[]) {
                                 break;
                             case CC_EXIT:
                                 printf("O gigante está saindo\n");
-                                err = leave(&nodeServer, net, &neighbours);
+                                err = leave(&nodeServer, net, &neighbours, &routingTable);
                                 if (!err) {
                                     printf("O gigante já saiu!\n");
                                 } else {
@@ -416,6 +490,9 @@ int main(int argc, char *argv[]) {
                                 break;
                             case CC_SHOWTOPOLOGY:
                                 showTopology(&neighbours);
+                                break;
+                            case CC_SHOWROUTING:
+                                showRouting(&routingTable);
                                 break;
                             default:
                                 printf("error: already joined network\n");
@@ -444,7 +521,7 @@ int main(int argc, char *argv[]) {
                             state = neighbourDisconnectionHandler(state, -1, &neighbours);
                             if (state == notRegistered) {
                                 printf("smthing wong\n");
-                                err = leave(&nodeServer, net, &neighbours);
+                                err = leave(&nodeServer, net, &neighbours, &routingTable);
                                 if (!err) {
                                     printf("O gigante já saiu!\n");
                                 } else {
@@ -467,7 +544,7 @@ int main(int argc, char *argv[]) {
                                 state = neighbourDisconnectionHandler(state, i, &neighbours);
                                 if (state == notRegistered) {
                                     printf("smthing wong\n");
-                                    err = leave(&nodeServer, net, &neighbours);
+                                    err = leave(&nodeServer, net, &neighbours, &routingTable);
                                     if (!err) {
                                         printf("O gigante já saiu!\n");
                                     } else {
@@ -479,7 +556,7 @@ int main(int argc, char *argv[]) {
                         }
                     }
                     break;
-                    
+
                 default:;
             }
         }

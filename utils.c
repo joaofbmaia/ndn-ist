@@ -110,3 +110,11 @@ void removeInternalFromTable(int internalIndex, struct neighbours *neighbours) {
     memset(&neighbours->internal[neighbours->numberOfInternals - 1], 0, sizeof neighbours->internal[neighbours->numberOfInternals - 1]);
     neighbours->numberOfInternals--;
 }
+
+int fdToIndex(int fd, struct neighbours *neighbours) {
+    for (int i = 0; i < neighbours->numberOfInternals; i++) {
+        if (neighbours->internal[i].fd == fd) return i;
+    }
+    if (neighbours->external.fd == fd) return -1;
+    return -2;
+}

@@ -9,16 +9,29 @@
 #include <unistd.h>
 #include "defines.h"
 #include "neighbours.h"
+#include "routing.h"
 #include "states.h"
 #include "utils.h"
+#include "routing.h"
 
 int openListener(struct neighbours *neighbours);
 int connectToNodeExtern(int nodeListSize, struct sockaddr_in *nodeList, struct neighbours *neighbours);
 int getNodeList(struct sockaddr_in *nodeServer, char *net, struct sockaddr_in *nodeList);
 
-/*Executes command join
-Write complete header at a later stage*/
-int join(struct sockaddr_in *nodeServer, char *net, struct neighbours *neighbours) {
+/******************************************************************************
+ * join()
+ *
+ * Arguments: nodeServer - Ip and port of node server 
+ *            net - net name 
+ *            neighbours - struct with all topology information
+ * Returns:   0 if ok, negative if error (describe error codes)
+ * Side-Effects: 
+ *
+ * Description: executes the first part of registration process by choosing,
+ *              connecting and sending message "NEW" to the external neighbour  
+ *****************************************************************************/
+
+int join(struct sockaddr_in *nodeServer, char *net, struct neighbours *neighbours, char *id, struct routingTable *routingTable) {
     int nodeListSize = 1;
     int err;
     struct sockaddr_in nodeList[MAX_LIST_SIZE];
@@ -71,6 +84,9 @@ int join(struct sockaddr_in *nodeServer, char *net, struct neighbours *neighbour
         }
     }
 
+    //add itself to routing table
+    addNodeToRoutingTable(0, id, routingTable);
+
     return 0;
 }
 
@@ -98,7 +114,7 @@ int openListener(struct neighbours *neighbours) {
 
 /*Executes leave command
 Write complete header at a later stage*/
-int leave(struct sockaddr_in *nodeServer, char *net, struct neighbours *neighbours) {
+int leave(struct sockaddr_in *nodeServer, char *net, struct neighbours *neighbours, struct routingTable *routingTable) {
     int err;
 
     //close fds
@@ -127,6 +143,9 @@ int leave(struct sockaddr_in *nodeServer, char *net, struct neighbours *neighbou
         return err;
     }
 
+    //reset routing table
+    memset(&routingTable, 0, sizeof routingTable);
+
     return 0;
 }
 
@@ -148,11 +167,6 @@ int loneNewInternalHandler(struct neighbours *neighbours, int internalIndex, str
 
     err = writeBufferToTcpStream(neighbours->internal[internalIndex].fd, writeBuffer);
 
-    if (err) {
-        memset(&neighbours->external.addrressInfo, 0, sizeof neighbours->external.addrressInfo);
-        /* close fd and remove node from internalNodes vector */
-    }
-
     return err;
 }
 
@@ -169,10 +183,6 @@ int newInternalHandler(struct neighbours *neighbours, int internalIndex, struct 
     sprintf(writeBuffer, "EXTERN %s %d\n", inet_ntop(AF_INET, &neighbours->external.addrressInfo.sin_addr, addrBuffer, sizeof addrBuffer), ntohs(neighbours->external.addrressInfo.sin_port));
 
     err = writeBufferToTcpStream(neighbours->internal[internalIndex].fd, writeBuffer);
-
-    if (err) {
-        /* close fd and remove node from internalNodes vector */
-    }
 
     return err;
 }
@@ -470,20 +480,29 @@ enum state broadcastExtern(enum state state, struct neighbours *neighbours) {
     char writeBuffer[BUFFER_SIZE];
     char addrBuffer[INET_ADDRSTRLEN];
 
-    int err[MAX_LIST_SIZE];
+    int err;
+    int index;
+
+    int errFd[MAX_LIST_SIZE];
+    int errCount = 0;
 
     enum state newState = state;
 
     sprintf(writeBuffer, "EXTERN %s %d\n", inet_ntop(AF_INET, &neighbours->external.addrressInfo.sin_addr, addrBuffer, sizeof addrBuffer), ntohs(neighbours->external.addrressInfo.sin_port));
 
     for (int i = 0; i < neighbours->numberOfInternals; i++) {
-        err[i] = writeBufferToTcpStream(neighbours->internal[i].fd, writeBuffer);
+        err = writeBufferToTcpStream(neighbours->internal[i].fd, writeBuffer);
+        if (err) {
+            errFd[errCount] = neighbours->internal[i].fd;
+            errCount++;
+        }
     }
 
-    for (int i = 0; i < neighbours->numberOfInternals; i++) {
-        if (err[i]) {
-            /* close fd and remove node from internalNodes vector */
-            newState = neighbourDisconnectionHandler(state, i, neighbours);
+    for (int i = 0; i < errCount; i++) {
+        /* close fd and remove node from internalNodes vector */
+        index = fdToIndex(errFd[i], neighbours);
+        if (index != -2) {
+            newState = neighbourDisconnectionHandler(state, index, neighbours);
         }
     }
 
@@ -568,7 +587,10 @@ enum state neighbourDisconnectionHandler(enum state state, int neighbourIndex, s
             break;
 
         case loneRegistered:  //LONEREG
-            // ROTINA 1
+            // ROTINA 5 (1)
+            if (neighbours->internal[neighbourIndex].addrressInfo.sin_addr.s_addr == neighbours->external.addrressInfo.sin_addr.s_addr && neighbours->internal[neighbourIndex].addrressInfo.sin_port == neighbours->external.addrressInfo.sin_port) {
+                neighbours->external.addrressInfo = neighbours->self.addrressInfo;
+            }
             closeInternal(neighbourIndex, neighbours);
             return loneRegistered;  // goto state LONEREG
             break;
