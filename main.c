@@ -89,7 +89,7 @@ int main(int argc, char *argv[]) {
                         //send ADVERTISE messages
                         err = advertiseToEdge(neighbours.external.fd, &routingTable);
                         if (err) {
-                            state = neighbourDisconnectionHandler(registered, -1, &neighbours);
+                            state = neighbourDisconnectionHandler(registered, -1, &neighbours, &routingTable);
                         }
                         changedState = 1;
                         break;
@@ -107,14 +107,14 @@ int main(int argc, char *argv[]) {
                         if (messageCode == MC_NEW) {
                             err = loneNewInternalHandler(&neighbours, i, &messageAddrInfo);
                             if (err) {
-                                state = neighbourDisconnectionHandler(loneRegistered, i, &neighbours);
+                                state = neighbourDisconnectionHandler(loneRegistered, i, &neighbours, &routingTable);
                                 changedState = 1;
                                 break;
                             }
                             //send ADVERTISE messages
                             err = advertiseToEdge(neighbours.internal[i].fd, &routingTable);
                             if (err) {
-                                state = neighbourDisconnectionHandler(loneRegistered, i, &neighbours);
+                                state = neighbourDisconnectionHandler(loneRegistered, i, &neighbours, &routingTable);
                                 changedState = 1;
                                 break;
                             }
@@ -141,6 +141,11 @@ int main(int argc, char *argv[]) {
                             state = broadcastAdvertise(neighbours.external.fd, messageId, &routingTable, registered, &neighbours);
                             changedState = 1;
                             break;
+                         case MC_WITHDRAW:
+                            removeNodeFromRoutingTable(messageId, &routingTable);
+                            state = broadcastWithdraw(neighbours.external.fd, messageId, &routingTable, registered, &neighbours);
+                            changedState = 1;
+                            break;
                         default:
                             break;
                     }
@@ -157,14 +162,14 @@ int main(int argc, char *argv[]) {
                             case MC_NEW:
                                 err = newInternalHandler(&neighbours, i, &messageAddrInfo);
                                 if (err) {
-                                    state = neighbourDisconnectionHandler(registered, i, &neighbours);
+                                    state = neighbourDisconnectionHandler(registered, i, &neighbours, &routingTable);
                                     changedState = 1;
                                     break;
                                 }
                                 //send ADVERTISE messages
                                 err = advertiseToEdge(neighbours.internal[i].fd, &routingTable);
                                 if (err) {
-                                    state = neighbourDisconnectionHandler(registered, i, &neighbours);
+                                    state = neighbourDisconnectionHandler(registered, i, &neighbours, &routingTable);
                                     changedState = 1;
                                     break;
                                 }
@@ -191,11 +196,11 @@ int main(int argc, char *argv[]) {
                     switch (messageCode) {
                         case MC_EXTERN:
                             externMessageHandler(&neighbours, &messageAddrInfo);
-                            state = broadcastExtern(registered, &neighbours);
+                            state = broadcastExtern(registered, &neighbours, &routingTable);
                             //send ADVERTISE messages
                             err = advertiseToEdge(neighbours.external.fd, &routingTable);
                             if (err) {
-                                state = neighbourDisconnectionHandler(registered, -1, &neighbours);
+                                state = neighbourDisconnectionHandler(registered, -1, &neighbours, &routingTable);
                             }
                             if (state == notRegistered) {
                                 printf("smthing wong\n");
@@ -212,6 +217,11 @@ int main(int argc, char *argv[]) {
                         case MC_ADVERTISE:
                             addNodeToRoutingTable(neighbours.external.fd, messageId, &routingTable);
                             state = broadcastAdvertise(neighbours.external.fd, messageId, &routingTable, registered, &neighbours);
+                            changedState = 1;
+                            break;
+                        case MC_WITHDRAW:
+                            removeNodeFromRoutingTable(messageId, &routingTable);
+                            state = broadcastWithdraw(neighbours.external.fd, messageId, &routingTable, registered, &neighbours);
                             changedState = 1;
                             break;
                         default:
@@ -442,7 +452,7 @@ int main(int argc, char *argv[]) {
                                 if (ret == -1) {
                                     printf("error: -1\n");
                                 }
-                                state = neighbourDisconnectionHandler(loneRegistered, i, &neighbours);
+                                state = neighbourDisconnectionHandler(loneRegistered, i, &neighbours, &routingTable);
                                 if (state == notRegistered) {
                                     printf("smthing wong\n");
                                     err = leave(&nodeServer, net, &neighbours, &routingTable);
@@ -518,7 +528,7 @@ int main(int argc, char *argv[]) {
                             if (ret == -1) {
                                 printf("error: -1\n");
                             }
-                            state = neighbourDisconnectionHandler(state, -1, &neighbours);
+                            state = neighbourDisconnectionHandler(state, -1, &neighbours, &routingTable);
                             if (state == notRegistered) {
                                 printf("smthing wong\n");
                                 err = leave(&nodeServer, net, &neighbours, &routingTable);
@@ -541,7 +551,7 @@ int main(int argc, char *argv[]) {
                                 if (ret == -1) {
                                     printf("error: -1\n");
                                 }
-                                state = neighbourDisconnectionHandler(state, i, &neighbours);
+                                state = neighbourDisconnectionHandler(state, i, &neighbours, &routingTable);
                                 if (state == notRegistered) {
                                     printf("smthing wong\n");
                                     err = leave(&nodeServer, net, &neighbours, &routingTable);

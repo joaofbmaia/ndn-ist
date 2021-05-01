@@ -12,7 +12,6 @@
 #include "routing.h"
 #include "states.h"
 #include "utils.h"
-#include "routing.h"
 
 int openListener(struct neighbours *neighbours);
 int connectToNodeExtern(int nodeListSize, struct sockaddr_in *nodeList, struct neighbours *neighbours);
@@ -454,6 +453,16 @@ int unreg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *ne
     return 0;
 }
 
+/******************************************************************************
+ * showTopology()
+ *
+ * Arguments: neighbours - struct with all topology information
+ * Returns:   
+ * Side-Effects: 
+ *
+ * Description: Prints external and recovery node 
+ *
+ *****************************************************************************/
 void showTopology(struct neighbours *neighbours) {
     char addrBuffer[INET_ADDRSTRLEN];
 
@@ -476,7 +485,7 @@ void promoteRandomInternalToExternal(struct neighbours *neighbours) {
     neighbours->external.addrressInfo = neighbours->internal[internalIndex].addrressInfo;
 }
 
-enum state broadcastExtern(enum state state, struct neighbours *neighbours) {
+enum state broadcastExtern(enum state state, struct neighbours *neighbours, struct routingTable *routingTable) {
     char writeBuffer[BUFFER_SIZE];
     char addrBuffer[INET_ADDRSTRLEN];
 
@@ -502,7 +511,7 @@ enum state broadcastExtern(enum state state, struct neighbours *neighbours) {
         /* close fd and remove node from internalNodes vector */
         index = fdToIndex(errFd[i], neighbours);
         if (index != -2) {
-            newState = neighbourDisconnectionHandler(state, index, neighbours);
+            newState = neighbourDisconnectionHandler(state, index, neighbours, routingTable);
         }
     }
 
@@ -538,14 +547,20 @@ int connectToRecovery(struct neighbours *neighbours) {
     return 0;
 }
 
-enum state neighbourDisconnectionHandler(enum state state, int neighbourIndex, struct neighbours *neighbours) {
+void externMessageHandler(struct neighbours *neighbours, struct sockaddr_in *addrinfo) {
+    neighbours->recovery.addrressInfo = *addrinfo;
+}
+
+enum state neighbourDisconnectionHandler(enum state state, int neighbourIndex, struct neighbours *neighbours, struct routingTable *routingTable) {
     int err;
     enum state newState = state;
+    int edgeToRemove;
     switch (state) {
         case registered:  //REG
             if (neighbourIndex == -1) {
                 if (neighbours->recovery.addrressInfo.sin_addr.s_addr == neighbours->self.addrressInfo.sin_addr.s_addr && neighbours->recovery.addrressInfo.sin_port == neighbours->self.addrressInfo.sin_port) {
                     // ROTINA 3
+                    edgeToRemove = neighbours->external.fd;
                     closeExternal(neighbours);
                     //if you are the only node remaining
                     if (neighbours->numberOfInternals == 0) {
@@ -553,20 +568,26 @@ enum state neighbourDisconnectionHandler(enum state state, int neighbourIndex, s
                         return loneRegistered;  // goto state LONEREG
                     }
                     promoteRandomInternalToExternal(neighbours);
-                    newState = broadcastExtern(state, neighbours);
+                    newState = broadcastExtern(state, neighbours, routingTable);
                     //inform routing layer about neighbour disconnection
+                    newState = withdrawEdge(edgeToRemove, routingTable, newState, neighbours);
                     return newState;
                 } else {
                     // ROTINA 4
+                    edgeToRemove = neighbours->external.fd;
                     err = connectToRecovery(neighbours);
                     if (err) {
                         return notRegistered;  // leave and go to state notReg
                     }
-                    return waitingRecovery;  //goto WAITREC
+                    newState = waitingRecovery;  //goto WAITREC
+                    //inform routing layer about neighbour disconnection
+                    newState = withdrawEdge(edgeToRemove, routingTable, newState, neighbours);
+                    return newState;
                 }
             } else {
                 if (neighbours->internal[neighbourIndex].addrressInfo.sin_addr.s_addr == neighbours->external.addrressInfo.sin_addr.s_addr && neighbours->internal[neighbourIndex].addrressInfo.sin_port == neighbours->external.addrressInfo.sin_port) {
                     // ROTINA 2
+                    edgeToRemove = neighbours->internal[neighbourIndex].fd;
                     closeInternal(neighbourIndex, neighbours);
                     //if you are the only node remaining
                     if (neighbours->numberOfInternals == 0) {
@@ -574,14 +595,18 @@ enum state neighbourDisconnectionHandler(enum state state, int neighbourIndex, s
                         return loneRegistered;  // goto state LONEREG
                     }
                     promoteRandomInternalToExternal(neighbours);
-                    newState = broadcastExtern(state, neighbours);
+                    newState = broadcastExtern(state, neighbours, routingTable);
                     //inform routing layer about neighbour disconnection
+                    newState = withdrawEdge(edgeToRemove, routingTable, newState, neighbours);
                     return newState;
                 } else {
                     // ROTINA 1
+                    edgeToRemove = neighbours->internal[neighbourIndex].fd;
                     closeInternal(neighbourIndex, neighbours);
                     //inform routing layer about neighbour disconnection
-                    return registered;  // goto state REG
+                    newState = registered;  // goto state REG
+                    newState = withdrawEdge(edgeToRemove, routingTable, newState, neighbours);
+                    return newState;  // goto state REG
                 }
             }
             break;
@@ -591,8 +616,12 @@ enum state neighbourDisconnectionHandler(enum state state, int neighbourIndex, s
             if (neighbours->internal[neighbourIndex].addrressInfo.sin_addr.s_addr == neighbours->external.addrressInfo.sin_addr.s_addr && neighbours->internal[neighbourIndex].addrressInfo.sin_port == neighbours->external.addrressInfo.sin_port) {
                 neighbours->external.addrressInfo = neighbours->self.addrressInfo;
             }
+            edgeToRemove = neighbours->internal[neighbourIndex].fd;
             closeInternal(neighbourIndex, neighbours);
-            return loneRegistered;  // goto state LONEREG
+            //inform routing layer about neighbour disconnection
+            newState = loneRegistered;  // goto state LONEREG
+            newState = withdrawEdge(edgeToRemove, routingTable, newState, neighbours);
+            return newState;
             break;
 
         case waitingRecovery:  //WAITREC
@@ -600,9 +629,12 @@ enum state neighbourDisconnectionHandler(enum state state, int neighbourIndex, s
                 return notRegistered;  // leave and go to state notReg
             } else {
                 // ROTINA 1
+                edgeToRemove = neighbours->internal[neighbourIndex].fd;
                 closeInternal(neighbourIndex, neighbours);
                 //inform routing layer about neighbour disconnection
-                return waitingRecovery;  // goto state WAITREC
+                newState = waitingRecovery;  // goto state WAITREC
+                newState = withdrawEdge(edgeToRemove, routingTable, newState, neighbours);
+                return newState;
             }
             break;
 
@@ -610,8 +642,4 @@ enum state neighbourDisconnectionHandler(enum state state, int neighbourIndex, s
             break;
     }
     return notRegistered;
-}
-
-void externMessageHandler(struct neighbours *neighbours, struct sockaddr_in *addrinfo) {
-    neighbours->recovery.addrressInfo = *addrinfo;
 }

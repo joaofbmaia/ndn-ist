@@ -43,7 +43,7 @@ int advertiseToEdge(int edge, struct routingTable *routingTable) {
  * Returns:   The state to which the state machine progresses
  * Side-Effects: 
  *
- * Description: Spreads avdertise message through ou the network
+ * Description: Spreads ADVERTISE message through ou the network
  *
  *****************************************************************************/
 enum state broadcastAdvertise(int originEdge, char *id, struct routingTable *routingTable, enum state state, struct neighbours *neighbours) {
@@ -73,17 +73,101 @@ enum state broadcastAdvertise(int originEdge, char *id, struct routingTable *rou
         /* close fd and remove node from internalNodes vector */
         index = fdToIndex(errEdge[i], neighbours);
         if (index != -2) {
-            newState = neighbourDisconnectionHandler(state, index, neighbours);
+            newState = neighbourDisconnectionHandler(state, index, neighbours, routingTable);
         }
     }
 
     if (originEdge != neighbours->external.fd && neighbours->external.fd != 0) {
         err = writeBufferToTcpStream(neighbours->external.fd, writeBuffer);
         if (err) {
-            newState = neighbourDisconnectionHandler(state, -1, neighbours);
+            newState = neighbourDisconnectionHandler(state, -1, neighbours, routingTable);
         }
     }
 
+    return newState;
+}
+
+/******************************************************************************
+ * broadcastWithdraw()
+ *
+ * Arguments: originEdge - File descriptor that describes message origin edge
+ *            id - id of the node to be advertised 
+ *            routingTable - Struct with routung table content
+ *            state - state to which the state machine has to progress
+ *            neighbours - struct with all topology information
+ * Returns:   The state to which the state machine progresses
+ * Side-Effects: 
+ *
+ * Description: Spreads WITHDRAW message through ou the network
+ *
+ *****************************************************************************/
+enum state broadcastWithdraw(int originEdge, char *id, struct routingTable *routingTable, enum state state, struct neighbours *neighbours) {
+    int errEdge[MAX_LIST_SIZE];
+    int errCount = 0;
+    int index;
+    int err;
+
+    char writeBuffer[BUFFER_SIZE + 16];
+
+    enum state newState = state;
+    
+    sprintf(writeBuffer, "WITHDRAW %s\n", id);
+
+    for (int i = 0; i < neighbours->numberOfInternals; i++) {
+        if (originEdge != neighbours->internal[i].fd) {
+            err = writeBufferToTcpStream(neighbours->internal[i].fd, writeBuffer);
+            if (err) {
+                errEdge[errCount] = neighbours->internal[i].fd;
+                errCount++;
+            }
+            
+        }
+    }
+
+    for (int i = 0; i < errCount; i++) {
+        /* close fd and remove node from internalNodes vector */
+        index = fdToIndex(errEdge[i], neighbours);
+        if (index != -2) {
+            newState = neighbourDisconnectionHandler(state, index, neighbours, routingTable);
+        }
+    }
+
+    if (originEdge != neighbours->external.fd && neighbours->external.fd != 0) {
+        err = writeBufferToTcpStream(neighbours->external.fd, writeBuffer);
+        if (err) {
+            newState = neighbourDisconnectionHandler(state, -1, neighbours, routingTable);
+        }
+    }
+
+    return newState;
+}
+
+/******************************************************************************
+ * withdrawEdge()
+ *
+ * Arguments: edge - File descriptor that describes edge to be removed
+ *            routingTable - Struct with routung table content 
+ *            state - state to which the state machine has to progress
+ *            neighbours - struct with all topology information
+ * Returns:   The state to which the state machine progresses
+ * Side-Effects: 
+ *
+ * Description: Informs net about all nodes to be removed from routing table
+ *
+ *****************************************************************************/
+enum state withdrawEdge(int edge, struct routingTable *routingTable, enum state state, struct neighbours *neighbours) {
+    enum state newState = state;
+
+    for (int i = 0; i < routingTable->size; i++) {
+        if (routingTable->entry[i].edgeFd == edge) {
+            newState = broadcastWithdraw(edge, routingTable->entry[i].id, routingTable, state, neighbours);
+        }
+    }
+    for (int i = 0; i < routingTable->size; i++) {
+        if (routingTable->entry[i].edgeFd == edge) {
+            removeNodeFromRoutingTable(routingTable->entry[i].id, routingTable);
+        }
+    }
     return newState;
 }
 
@@ -137,6 +221,16 @@ void removeNodeFromRoutingTable(char *id, struct routingTable *routingTable) {
     }
 }
 
+/******************************************************************************
+ * showRouting()
+ *
+ * Arguments:  routingTable - Struct with routung table content
+ * Returns:   
+ * Side-Effects: 
+ *
+ * Description: Prints routing table 
+ *
+ *****************************************************************************/
 void showRouting(struct routingTable *routingTable) {
     for (int i = 0; i < routingTable->size; i++) {
         printf("id: %s    edge: %d\n", routingTable->entry[i].id, routingTable->entry[i].edgeFd);

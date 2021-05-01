@@ -16,9 +16,10 @@ void showTopology(struct neighbours *neighbours);
 void closeInternal(int internalIndex, struct neighbours *neighbours);
 void closeExternal(struct neighbours *neighbours);
 void promoteRandomInternalToExternal(struct neighbours *neighbours);
-enum state broadcastExtern(enum state state, struct neighbours *neighbours);
+enum state broadcastExtern(enum state state, struct neighbours *neighbours, struct routingTable *routingTable);
 int connectToRecovery(struct neighbours *neighbours);
-enum state neighbourDisconnectionHandler(enum state state, int neighbourIndex, struct neighbours *neighbours);
 void externMessageHandler(struct neighbours *neighbours, struct sockaddr_in *addrinfo);
+enum state neighbourDisconnectionHandler(enum state state, int neighbourIndex, struct neighbours *neighbours, struct routingTable *routingTable);
+
 
 #endif
