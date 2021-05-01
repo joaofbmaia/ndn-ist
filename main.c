@@ -141,7 +141,7 @@ int main(int argc, char *argv[]) {
                             state = broadcastAdvertise(neighbours.external.fd, messageId, &routingTable, registered, &neighbours);
                             changedState = 1;
                             break;
-                         case MC_WITHDRAW:
+                        case MC_WITHDRAW:
                             removeNodeFromRoutingTable(messageId, &routingTable);
                             state = broadcastWithdraw(neighbours.external.fd, messageId, &routingTable, registered, &neighbours);
                             changedState = 1;
@@ -178,6 +178,12 @@ int main(int argc, char *argv[]) {
                             case MC_ADVERTISE:
                                 addNodeToRoutingTable(neighbours.internal[i].fd, messageId, &routingTable);
                                 state = broadcastAdvertise(neighbours.internal[i].fd, messageId, &routingTable, registered, &neighbours);
+                                changedState = 1;
+                                break;
+
+                            case MC_WITHDRAW:
+                                removeNodeFromRoutingTable(messageId, &routingTable);
+                                state = broadcastWithdraw(neighbours.internal[i].fd, messageId, &routingTable, registered, &neighbours);
                                 changedState = 1;
                                 break;
 
@@ -247,8 +253,14 @@ int main(int argc, char *argv[]) {
                                 break;
 
                             case MC_ADVERTISE:
-                                addNodeToRoutingTable(neighbours.external.fd, messageId, &routingTable);
-                                state = broadcastAdvertise(neighbours.external.fd, messageId, &routingTable, registered, &neighbours);
+                                addNodeToRoutingTable(neighbours.internal[i].fd, messageId, &routingTable);
+                                state = broadcastAdvertise(neighbours.internal[i].fd, messageId, &routingTable, registered, &neighbours);
+                                changedState = 1;
+                                break;
+
+                            case MC_WITHDRAW:
+                                removeNodeFromRoutingTable(messageId, &routingTable);
+                                state = broadcastWithdraw(neighbours.internal[i].fd, messageId, &routingTable, registered, &neighbours);
                                 changedState = 1;
                                 break;
 

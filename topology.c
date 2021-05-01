@@ -143,7 +143,7 @@ int leave(struct sockaddr_in *nodeServer, char *net, struct neighbours *neighbou
     }
 
     //reset routing table
-    memset(&routingTable, 0, sizeof routingTable);
+    memset(routingTable, 0, sizeof *routingTable);
 
     return 0;
 }
@@ -565,7 +565,9 @@ enum state neighbourDisconnectionHandler(enum state state, int neighbourIndex, s
                     //if you are the only node remaining
                     if (neighbours->numberOfInternals == 0) {
                         neighbours->external.addrressInfo = neighbours->self.addrressInfo;
-                        return loneRegistered;  // goto state LONEREG
+                        newState = loneRegistered;  // goto state LONEREG
+                        newState = withdrawEdge(edgeToRemove, routingTable, newState, neighbours);
+                        return newState;
                     }
                     promoteRandomInternalToExternal(neighbours);
                     newState = broadcastExtern(state, neighbours, routingTable);
@@ -575,13 +577,14 @@ enum state neighbourDisconnectionHandler(enum state state, int neighbourIndex, s
                 } else {
                     // ROTINA 4
                     edgeToRemove = neighbours->external.fd;
+                    closeExternal(neighbours);
+                    newState = waitingRecovery;  //goto WAITREC
+                    newState = withdrawEdge(edgeToRemove, routingTable, newState, neighbours);
                     err = connectToRecovery(neighbours);
                     if (err) {
                         return notRegistered;  // leave and go to state notReg
                     }
-                    newState = waitingRecovery;  //goto WAITREC
                     //inform routing layer about neighbour disconnection
-                    newState = withdrawEdge(edgeToRemove, routingTable, newState, neighbours);
                     return newState;
                 }
             } else {
@@ -592,7 +595,9 @@ enum state neighbourDisconnectionHandler(enum state state, int neighbourIndex, s
                     //if you are the only node remaining
                     if (neighbours->numberOfInternals == 0) {
                         neighbours->external.addrressInfo = neighbours->self.addrressInfo;
-                        return loneRegistered;  // goto state LONEREG
+                        newState = loneRegistered;  // goto state LONEREG
+                        newState = withdrawEdge(edgeToRemove, routingTable, newState, neighbours);
+                        return newState;
                     }
                     promoteRandomInternalToExternal(neighbours);
                     newState = broadcastExtern(state, neighbours, routingTable);

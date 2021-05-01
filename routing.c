@@ -166,6 +166,7 @@ enum state withdrawEdge(int edge, struct routingTable *routingTable, enum state 
     for (int i = 0; i < routingTable->size; i++) {
         if (routingTable->entry[i].edgeFd == edge) {
             removeNodeFromRoutingTable(routingTable->entry[i].id, routingTable);
+            i--;
         }
     }
     return newState;
