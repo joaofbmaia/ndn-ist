@@ -24,10 +24,10 @@ int createObject(char *objectSubname, struct objectTable *objectTable, char *id)
 
     sprintf(nameBuffer, "%s.%s", id, objectSubname);
 
-    //check if object already exists 
-    for (int i = 0; i < objectTable->size; i++){
-        if (!strcmp(objectTable->entry[i].name, nameBuffer)){
-            return 1; 
+    //check if object already exists
+    for (int i = 0; i < objectTable->size; i++) {
+        if (!strcmp(objectTable->entry[i].name, nameBuffer)) {
+            return 1;
         }
     }
     //saves object to oobject table
@@ -249,7 +249,7 @@ int dataHandler(char *objectName, struct interestTable *interestTable, struct ca
 
     // search interest table for matching request
     for (int i = 0; interestTable->size; i++) {
-        if(!strcmp(interestTable->entry[i].name, data.name)){
+        if (!strcmp(interestTable->entry[i].name, data.name)) {
             pushToCache(&data, cache);
             destEdge = interestTable->entry[i].sourceEdge;
             removeFromInterestTable(data.name, interestTable);
@@ -301,7 +301,7 @@ int noDataHandler(char *objectName, struct interestTable *interestTable, struct 
 
     // search interest table for matching request
     for (int i = 0; interestTable->size; i++) {
-        if(!strcmp(interestTable->entry[i].name, objectName)){
+        if (!strcmp(interestTable->entry[i].name, objectName)) {
             destEdge = interestTable->entry[i].sourceEdge;
             removeFromInterestTable(objectName, interestTable);
             break;
@@ -379,7 +379,6 @@ void removeStaleEntriesFromInterestTable(struct interestTable *interestTable, in
         }
     }
 }
-
 
 /******************************************************************************
  * pushToCache()

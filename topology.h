@@ -22,5 +22,4 @@ int connectToRecovery(struct neighbours *neighbours);
 void externMessageHandler(struct neighbours *neighbours, struct sockaddr_in *addrinfo);
 enum state neighbourDisconnectionHandler(enum state state, int neighbourIndex, struct neighbours *neighbours, struct routingTable *routingTable);
 
-
 #endif

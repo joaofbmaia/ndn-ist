@@ -1,13 +1,12 @@
 #include <arpa/inet.h>
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/select.h>
 #include <unistd.h>
-#include <errno.h>
 #include "neighbours.h"
 
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
-
 
 /******************************************************************************
  * setFds()
@@ -70,7 +69,6 @@ int writeBufferToTcpStream(int fd, char *writeBuffer) {
     return 0;
 }
 
-
 /******************************************************************************
  * readTcpSreamTBuffer()
  *
@@ -118,10 +116,9 @@ char *getMessageFromBuffer(char *buffer) {
     static char message[BUFFER_SIZE];
     char temp[BUFFER_SIZE];
 
-    
     //looks for newline character
     newlineLocation = strchr(buffer, '\n');
-    
+
     //if it does not find a new line there is no message to be prcessed
     if (newlineLocation == NULL) {
         return NULL;
@@ -151,7 +148,7 @@ char *getMessageFromBuffer(char *buffer) {
  *              internals.
  *****************************************************************************/
 void removeInternalFromTable(int internalIndex, struct neighbours *neighbours) {
-    for(int  i = internalIndex + 1; i < neighbours->numberOfInternals; i++) {
+    for (int i = internalIndex + 1; i < neighbours->numberOfInternals; i++) {
         neighbours->internal[i - 1] = neighbours->internal[i];
     }
     memset(&neighbours->internal[neighbours->numberOfInternals - 1], 0, sizeof neighbours->internal[neighbours->numberOfInternals - 1]);
@@ -186,40 +183,40 @@ int fdToIndex(int fd, struct neighbours *neighbours) {
  *
  * Description: Prints error message depending on error type.
  *****************************************************************************/
-void printErrorMessage (int errCode){
-    if (errCode == -1){
+void printErrorMessage(int errCode) {
+    if (errCode == -1) {
         fprintf(stderr, "error: %s\n", strerror(errno));
     }
 
-    if (errCode == -2){
+    if (errCode == -2) {
         fprintf(stderr, "error: could not send message to node server\n");
-    } 
+    }
 
-    if (errCode == -3){
+    if (errCode == -3) {
         fprintf(stderr, "error: node server took too long to respond\n");
-    } 
-    
-    if (errCode == -4){
+    }
+
+    if (errCode == -4) {
         fprintf(stderr, "error: recieved malformed expression from node server\n");
-    } 
+    }
 
-    if (errCode == -5){
+    if (errCode == -5) {
         fprintf(stderr, "error: unxpected response from node server\n");
-    } 
+    }
 
-    if (errCode == -6){
+    if (errCode == -6) {
         fprintf(stderr, "error: invalid address format read from node server\n");
-    } 
+    }
 
-    if (errCode == -7){
+    if (errCode == -7) {
         fprintf(stderr, "error: exceeded number of tries when trying to connect to a node from net\n");
     }
 
-    if (errCode == -8){
+    if (errCode == -8) {
         fprintf(stderr, "error: failed to connect to specified node\n");
     }
 
-    if (errCode == -10){
+    if (errCode == -10) {
         fprintf(stderr, "error: failed to connect to recovery node\n");
     }
 }

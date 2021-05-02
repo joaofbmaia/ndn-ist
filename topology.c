@@ -10,9 +10,9 @@
 #include "defines.h"
 #include "neighbours.h"
 #include "routing.h"
+#include "search.h"
 #include "states.h"
 #include "utils.h"
-#include "search.h"
 
 int openListener(struct neighbours *neighbours);
 int connectToNodeExtern(int nodeListSize, struct sockaddr_in *nodeList, struct neighbours *neighbours);
@@ -116,7 +116,7 @@ int openListener(struct neighbours *neighbours) {
     if (err == -1) {
         return err;
     }
-    
+
     //starts to listen
     err = listen(neighbours->self.fd, 5);
     if (err == -1) {
@@ -125,7 +125,6 @@ int openListener(struct neighbours *neighbours) {
 
     return 0;
 }
-
 
 /******************************************************************************
  * leave()
@@ -181,7 +180,6 @@ int leave(struct sockaddr_in *nodeServer, char *net, struct neighbours *neighbou
     return 0;
 }
 
-
 /******************************************************************************
  * loneNewInternalHandler()
  *
@@ -214,7 +212,6 @@ int loneNewInternalHandler(struct neighbours *neighbours, int internalIndex, str
 
     return err;
 }
-
 
 /******************************************************************************
  * newInternalHandler()
@@ -380,8 +377,8 @@ int getNodeList(struct sockaddr_in *nodeServer, char *net, struct sockaddr_in *n
         close(fd);
         return -1;
     }
-    
-    //recieves message from node server 
+
+    //recieves message from node server
     n = recvfrom(fd, buffer, BUFFER_SIZE - 1, 0, NULL, NULL);
     if (n == -1) {
         close(fd);
@@ -390,15 +387,14 @@ int getNodeList(struct sockaddr_in *nodeServer, char *net, struct sockaddr_in *n
 
     buffer[n] = '\0';
 
-    
     token = strtok(buffer, "\n");
 
     //error: recieved malformed expression from node server
     if (sscanf(token, "%s %s", headerBuffer, netBuffer) != 2) {
         close(fd);
         return -4;
-    
-      //error: unxpected response from node server
+
+        //error: unxpected response from node server
     } else if (strcmp("NODESLIST", headerBuffer) || strcmp(net, netBuffer)) {
         return -5;
     }
@@ -423,9 +419,9 @@ int getNodeList(struct sockaddr_in *nodeServer, char *net, struct sockaddr_in *n
         nodeList[counter].sin_port = htons(port);
 
         nodeList[counter].sin_family = AF_INET;
-        
+
         //increments node counter
-        counter++;  
+        counter++;
         token = strtok(NULL, "\n");
     }
 
@@ -462,7 +458,7 @@ int reg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *net)
     sprintf(buffer, "REG %s %s %d", net, inet_ntop(AF_INET, &nodeSelf->sin_addr, addrBuffer, sizeof addrBuffer), ntohs(nodeSelf->sin_port));
     n = sendto(fd, buffer, strlen(buffer), 0, (struct sockaddr *) nodeServer, sizeof(*nodeServer));
 
-    //error sending message to node server 
+    //error sending message to node server
     if (n != strlen(buffer)) {
         close(fd);
         return -2;
@@ -473,8 +469,8 @@ int reg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *net)
 
     //sets a timeout for the node server response
     ret = select(fd + 1, &rfds, NULL, NULL, &timeout);
-    
-    //error: node server timed out 
+
+    //error: node server timed out
     if (ret == 0) {
         close(fd);
         return -3;
@@ -544,7 +540,7 @@ int unreg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *ne
     //If the node server takes more than 3 secs to answer too bad
     ret = select(fd + 1, &rfds, NULL, NULL, &timeout);
 
-    //error: node server timed out 
+    //error: node server timed out
     if (ret == 0) {
         close(fd);
         return -3;

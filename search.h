@@ -25,7 +25,7 @@ struct interestTable {
     int size;
 };
 
-struct cache{
+struct cache {
     struct object entry[CACHE_SIZE];
     int size;
 };

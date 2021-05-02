@@ -12,5 +12,4 @@
 #define DEFAULT_REGIP "193.136.138.142"
 #define INTEREST_TIMEOUT 5
 
-
 #endif

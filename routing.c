@@ -1,10 +1,10 @@
 #include "routing.h"
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
+#include "neighbours.h"
 #include "states.h"
 #include "topology.h"
 #include "utils.h"
-#include "neighbours.h"
 
 /******************************************************************************
  * avertiseToEdge()
@@ -55,7 +55,7 @@ enum state broadcastAdvertise(int originEdge, char *id, struct routingTable *rou
     char writeBuffer[BUFFER_SIZE + 16];
 
     enum state newState = state;
-    
+
     sprintf(writeBuffer, "ADVERTISE %s\n", id);
 
     for (int i = 0; i < neighbours->numberOfInternals; i++) {
@@ -65,7 +65,6 @@ enum state broadcastAdvertise(int originEdge, char *id, struct routingTable *rou
                 errEdge[errCount] = neighbours->internal[i].fd;
                 errCount++;
             }
-            
         }
     }
 
@@ -110,7 +109,7 @@ enum state broadcastWithdraw(int originEdge, char *id, struct routingTable *rout
     char writeBuffer[BUFFER_SIZE + 16];
 
     enum state newState = state;
-    
+
     sprintf(writeBuffer, "WITHDRAW %s\n", id);
 
     for (int i = 0; i < neighbours->numberOfInternals; i++) {
@@ -120,7 +119,6 @@ enum state broadcastWithdraw(int originEdge, char *id, struct routingTable *rout
                 errEdge[errCount] = neighbours->internal[i].fd;
                 errCount++;
             }
-            
         }
     }
 
