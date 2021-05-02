@@ -36,8 +36,6 @@ int main(int argc, char *argv[]) {
     char messageId[BUFFER_SIZE], messageName[BUFFER_SIZE];
     struct sockaddr_in messageAddrInfo;
     char *message;
-    socklen_t addrlen = 0;
-    struct sockaddr addr;
 
     int changedState;
     int printPrompt;
@@ -482,7 +480,7 @@ int main(int argc, char *argv[]) {
                     //checks if anyone is trying to connect to the network
                     if (FD_ISSET(neighbours.self.fd, &rfds)) {
                         FD_CLR(neighbours.self.fd, &rfds);
-                        neighbours.internal[neighbours.numberOfInternals].fd = accept(neighbours.self.fd, &addr, &addrlen);
+                        neighbours.internal[neighbours.numberOfInternals].fd = accept(neighbours.self.fd, NULL, NULL);
                         if (neighbours.internal[neighbours.numberOfInternals].fd == -1) {
                             printf("error: -1\n");
                         }
@@ -586,7 +584,7 @@ int main(int argc, char *argv[]) {
                     //checks if anyone is trying to connect to the network
                     if (FD_ISSET(neighbours.self.fd, &rfds)) {
                         FD_CLR(neighbours.self.fd, &rfds);
-                        neighbours.internal[neighbours.numberOfInternals].fd = accept(neighbours.self.fd, &addr, &addrlen);
+                        neighbours.internal[neighbours.numberOfInternals].fd = accept(neighbours.self.fd, NULL, NULL);
                         if (neighbours.internal[neighbours.numberOfInternals].fd == -1) {
                             printf("error: -1\n");
                         }
