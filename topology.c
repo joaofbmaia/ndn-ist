@@ -106,11 +106,17 @@ int openListener(struct neighbours *neighbours) {
     if (neighbours->self.fd == -1) {
         return neighbours->self.fd;
     }
+
     //binds listening fd to the port in nodeSelf
-    err = bind(neighbours->self.fd, (struct sockaddr *) &neighbours->self.addrressInfo, sizeof(neighbours->self.addrressInfo));
+    struct sockaddr_in portOnly;
+    portOnly = neighbours->self.addrressInfo;
+    portOnly.sin_addr.s_addr = INADDR_ANY;
+
+    err = bind(neighbours->self.fd, (struct sockaddr *) &portOnly, sizeof(portOnly));
     if (err == -1) {
         return err;
     }
+    
     //starts to listen
     err = listen(neighbours->self.fd, 5);
     if (err == -1) {
