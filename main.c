@@ -152,6 +152,30 @@ int main(int argc, char *argv[]) {
                             state = broadcastWithdraw(neighbours.external.fd, messageId, &routingTable, registered, &neighbours);
                             changedState = 1;
                             break;
+                        case MC_INTEREST:
+                            errFd = interestHandler(messageName, &objectTable, &interestTable, &cache, &routingTable, neighbours.external.fd);
+                            if (errFd) {
+                                state = neighbourDisconnectionHandler(state, fdToIndex(errFd, &neighbours), &neighbours, &routingTable);
+                                changedState = 1;
+                                break;
+                            }
+                            break;
+                        case MC_DATA:
+                            errFd = dataHandler(messageName, &interestTable, &cache, &routingTable);
+                            if (errFd) {
+                                state = neighbourDisconnectionHandler(state, fdToIndex(errFd, &neighbours), &neighbours, &routingTable);
+                                changedState = 1;
+                                break;
+                            }
+                            break;
+                        case MC_NODATA:
+                            errFd = noDataHandler(messageName, &interestTable, &cache, &routingTable);
+                            if (errFd) {
+                                state = neighbourDisconnectionHandler(state, fdToIndex(errFd, &neighbours), &neighbours, &routingTable);
+                                changedState = 1;
+                                break;
+                            }
+                            break;
                         default:
                             break;
                     }
@@ -192,7 +216,30 @@ int main(int argc, char *argv[]) {
                                 state = broadcastWithdraw(neighbours.internal[i].fd, messageId, &routingTable, registered, &neighbours);
                                 changedState = 1;
                                 break;
-
+                            case MC_INTEREST:
+                                errFd = interestHandler(messageName, &objectTable, &interestTable, &cache, &routingTable, neighbours.internal[i].fd);
+                                if (errFd) {
+                                    state = neighbourDisconnectionHandler(state, fdToIndex(errFd, &neighbours), &neighbours, &routingTable);
+                                    changedState = 1;
+                                    break;
+                                }
+                                break;
+                            case MC_DATA:
+                                errFd = dataHandler(messageName, &interestTable, &cache, &routingTable);
+                                if (errFd) {
+                                    state = neighbourDisconnectionHandler(state, fdToIndex(errFd, &neighbours), &neighbours, &routingTable);
+                                    changedState = 1;
+                                    break;
+                                }
+                                break;
+                            case MC_NODATA:
+                                errFd = noDataHandler(messageName, &interestTable, &cache, &routingTable);
+                                if (errFd) {
+                                    state = neighbourDisconnectionHandler(state, fdToIndex(errFd, &neighbours), &neighbours, &routingTable);
+                                    changedState = 1;
+                                    break;
+                                }
+                                break;
                             default:
                                 break;
                         }
@@ -236,6 +283,31 @@ int main(int argc, char *argv[]) {
                             state = broadcastWithdraw(neighbours.external.fd, messageId, &routingTable, registered, &neighbours);
                             changedState = 1;
                             break;
+
+                        case MC_INTEREST:
+                            errFd = interestHandler(messageName, &objectTable, &interestTable, &cache, &routingTable, neighbours.external.fd);
+                            if (errFd) {
+                                state = neighbourDisconnectionHandler(state, fdToIndex(errFd, &neighbours), &neighbours, &routingTable);
+                                changedState = 1;
+                                break;
+                            }
+                            break;
+                        case MC_DATA:
+                            errFd = dataHandler(messageName, &interestTable, &cache, &routingTable);
+                            if (errFd) {
+                                state = neighbourDisconnectionHandler(state, fdToIndex(errFd, &neighbours), &neighbours, &routingTable);
+                                changedState = 1;
+                                break;
+                            }
+                            break;
+                        case MC_NODATA:
+                            errFd = noDataHandler(messageName, &interestTable, &cache, &routingTable);
+                            if (errFd) {
+                                state = neighbourDisconnectionHandler(state, fdToIndex(errFd, &neighbours), &neighbours, &routingTable);
+                                changedState = 1;
+                                break;
+                            }
+                            break;
                         default:
                             break;
                     }
@@ -270,6 +342,30 @@ int main(int argc, char *argv[]) {
                                 changedState = 1;
                                 break;
 
+                            case MC_INTEREST:
+                                errFd = interestHandler(messageName, &objectTable, &interestTable, &cache, &routingTable, neighbours.internal[i].fd);
+                                if (errFd) {
+                                    state = neighbourDisconnectionHandler(state, fdToIndex(errFd, &neighbours), &neighbours, &routingTable);
+                                    changedState = 1;
+                                    break;
+                                }
+                                break;
+                            case MC_DATA:
+                                errFd = dataHandler(messageName, &interestTable, &cache, &routingTable);
+                                if (errFd) {
+                                    state = neighbourDisconnectionHandler(state, fdToIndex(errFd, &neighbours), &neighbours, &routingTable);
+                                    changedState = 1;
+                                    break;
+                                }
+                                break;
+                            case MC_NODATA:
+                                errFd = noDataHandler(messageName, &interestTable, &cache, &routingTable);
+                                if (errFd) {
+                                    state = neighbourDisconnectionHandler(state, fdToIndex(errFd, &neighbours), &neighbours, &routingTable);
+                                    changedState = 1;
+                                    break;
+                                }
+                                break;
                             default:
                                 break;
                         }
@@ -451,13 +547,12 @@ int main(int argc, char *argv[]) {
                                 err = createObject(commandName, &objectTable, id);
                                 if (err) {
                                     printf("error: no space for more objects\n");
-                                }
-                                else {
+                                } else {
                                     printf("successfully created object %s.%s\n", id, commandName);
                                 }
                                 break;
                             case CC_GET:
-                                errFd = getObject(commandName, &objectTable, &interestTable, &cache, &routingTable, id);
+                                errFd = getObject(commandName, &objectTable, &interestTable, &cache, &routingTable);
                                 if (errFd) {
                                     state = neighbourDisconnectionHandler(state, fdToIndex(errFd, &neighbours), &neighbours, &routingTable);
                                     changedState = 1;
@@ -475,7 +570,6 @@ int main(int argc, char *argv[]) {
                         changedState = 0;
                         break;
                     }
-
 
                     //checks if anyone is trying to connect to the network
                     if (FD_ISSET(neighbours.self.fd, &rfds)) {
@@ -556,13 +650,12 @@ int main(int argc, char *argv[]) {
                                 err = createObject(commandName, &objectTable, id);
                                 if (err) {
                                     printf("error: no space for more objects\n");
-                                }
-                                else {
+                                } else {
                                     printf("successfully created object %s.%s\n", id, commandName);
                                 }
                                 break;
                             case CC_GET:
-                                errFd = getObject(commandName, &objectTable, &interestTable, &cache, &routingTable, id);
+                                errFd = getObject(commandName, &objectTable, &interestTable, &cache, &routingTable);
                                 if (errFd) {
                                     state = neighbourDisconnectionHandler(state, fdToIndex(errFd, &neighbours), &neighbours, &routingTable);
                                     changedState = 1;
@@ -580,7 +673,7 @@ int main(int argc, char *argv[]) {
                         changedState = 0;
                         break;
                     }
-                    
+
                     //checks if anyone is trying to connect to the network
                     if (FD_ISSET(neighbours.self.fd, &rfds)) {
                         FD_CLR(neighbours.self.fd, &rfds);

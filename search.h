@@ -16,7 +16,7 @@ struct objectTable {
 
 struct interest {
     char name[BUFFER_SIZE];
-    char source[BUFFER_SIZE];
+    char sourceEdge;
     time_t creationTime;
 };
 
@@ -31,8 +31,11 @@ struct cache{
 };
 
 int createObject(char *objectSubName, struct objectTable *objectTable, char *id);
-int getObject(char *objectName, struct objectTable *objectTable, struct interestTable *interestTable, struct cache *cache, struct routingTable *routingTable, char *selfId);
-
+int getObject(char *objectName, struct objectTable *objectTable, struct interestTable *interestTable, struct cache *cache, struct routingTable *routingTable);
+int interestHandler(char *objectName, struct objectTable *objectTable, struct interestTable *interestTable, struct cache *cache, struct routingTable *routingTable, int sourceEdge);
+int dataHandler(char *objectName, struct interestTable *interestTable, struct cache *cache, struct routingTable *routingTable);
+int noDataHandler(char *objectName, struct interestTable *interestTable, struct cache *cache, struct routingTable *routingTable);
+void removeFromInterestTable(char *objectName, struct interestTable *interestTable);
 void pushToCache(struct object *object, struct cache *cache);
 struct object *retrieveFromCache(char *name, struct cache *cache);
 void showCache(struct cache *cache);

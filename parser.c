@@ -249,6 +249,9 @@ int messageParser(char *buffer, char *id, char *name, struct sockaddr_in *addrin
         if (tokenCount > 2) {
             return MC_ERROR;
         }
+        if (!strchr(tokens[1], '.')) {
+            return MC_ERROR;
+        }
 
         strcpy(name, tokens[1]);
 
@@ -258,6 +261,9 @@ int messageParser(char *buffer, char *id, char *name, struct sockaddr_in *addrin
         if (tokenCount > 2) {
             return MC_ERROR;
         }
+        if (!strchr(tokens[1], '.')) {
+            return MC_ERROR;
+        }
 
         strcpy(name, tokens[1]);
 
@@ -265,6 +271,9 @@ int messageParser(char *buffer, char *id, char *name, struct sockaddr_in *addrin
     }
     if (!strcmp(tokens[0], "NODATA")) {
         if (tokenCount > 2) {
+            return MC_ERROR;
+        }
+        if (!strchr(tokens[1], '.')) {
             return MC_ERROR;
         }
 
