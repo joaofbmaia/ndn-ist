@@ -1,3 +1,19 @@
+/**
+ * Instituto Superior Técnico
+ * Redes de Computadores e Internet
+ * NDN - Named data networking
+ * 
+ * Authors: Group 1 RCI
+ *     Francisco Carrilho - 93062 MEEC
+ *     João Maia - 93091 MEEC
+ * 
+ * Synopsis: Implementation of a simple named data network, based on TCP sessions, in wich node is identified by a name, 
+ *           and has objects that are available to the network.
+ * 
+ * Date: May 2021
+ * 
+ */
+
 #include <arpa/inet.h>
 #include <errno.h>
 #include <signal.h>
