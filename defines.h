@@ -10,6 +10,7 @@
 #define MAX_OBJECTS 512
 #define DEFAULT_REGUDP 59000
 #define DEFAULT_REGIP "193.136.138.142"
+#define INTEREST_TIMEOUT 5
 
 
 #endif

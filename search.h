@@ -36,6 +36,7 @@ int interestHandler(char *objectName, struct objectTable *objectTable, struct in
 int dataHandler(char *objectName, struct interestTable *interestTable, struct cache *cache, struct routingTable *routingTable);
 int noDataHandler(char *objectName, struct interestTable *interestTable, struct cache *cache, struct routingTable *routingTable);
 void removeFromInterestTable(char *objectName, struct interestTable *interestTable);
+int removeStaleEntriesFromInterestTable(struct interestTable *interestTable);
 void pushToCache(struct object *object, struct cache *cache);
 struct object *retrieveFromCache(char *name, struct cache *cache);
 void showCache(struct cache *cache);

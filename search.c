@@ -256,7 +256,7 @@ int dataHandler(char *objectName, struct interestTable *interestTable, struct ca
 
     //DATA is for me? 👉😳👈
     if (destEdge == 0) {
-        printf("Received object: %s\n", data.name);
+        printf("\nReceived object: %s\n", data.name);
         return 0;
     }
 
@@ -305,7 +305,7 @@ int noDataHandler(char *objectName, struct interestTable *interestTable, struct 
 
     //NODATA is for me? 👉😳👈
     if (destEdge == 0) {
-        printf("No object found 🤔\n");
+        printf("\nNo object found 🤔\n");
         return 0;
     }
 
@@ -321,7 +321,7 @@ int noDataHandler(char *objectName, struct interestTable *interestTable, struct 
 }
 
 /******************************************************************************
- * removeNodeToInterestTable()
+ * removeFromInterestTable()
  *
  * Arguments: objectName - name of the object to be removed from table
  *            interestTable - Table with all interest requests
@@ -342,6 +342,33 @@ void removeFromInterestTable(char *objectName, struct interestTable *interestTab
             return;
         }
     }
+}
+
+/******************************************************************************
+ * removeStaleEntriesFromInterestTable()
+ *
+ * Arguments: interestTable - Table with all interest requests
+ * Returns:   Flag print promt 1 if a message is printedor 0 if
+ *            not
+ * Side-Effects: 
+ *
+ * Description: Finds and removes an object from the interest table
+ *              after not recieving an answer for a certain time.
+ *****************************************************************************/
+int removeStaleEntriesFromInterestTable(struct interestTable *interestTable) {
+    int printPrompt = 0;
+    time_t now = time(NULL);
+    for (int i = 0; i < interestTable->size; i++) {
+        if ((now - interestTable->entry[i].creationTime) > INTEREST_TIMEOUT) {
+            if (interestTable->entry[i].sourceEdge == 0) {
+                printf("\nInterest message for object %s timed out with no response 😱\n", interestTable->entry[i].name);
+                printPrompt = 1;
+            }
+            removeFromInterestTable(interestTable->entry[i].name, interestTable);
+            i--;
+        }
+    }
+    return printPrompt;
 }
 
 

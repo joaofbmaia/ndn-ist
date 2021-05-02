@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/select.h>
+#include <sys/time.h>
 #include <time.h>
 #include "defines.h"
 #include "neighbours.h"
@@ -19,6 +20,7 @@
 int main(int argc, char *argv[]) {
     struct sockaddr_in nodeServer;
     fd_set rfds;
+    struct timeval timeout;
 
     // when declared as static variable will be stored in data segment, instead of stack. No more stack overflows 😎
     static struct neighbours neighbours;
@@ -386,7 +388,15 @@ int main(int argc, char *argv[]) {
             fflush(stdout);
         }
 
-        counter = select(maxfd + 1, &rfds, NULL, NULL, NULL);
+        timeout.tv_sec = SEL_TIMEOUT;
+        timeout.tv_usec = 0;
+
+        counter = select(maxfd + 1, &rfds, NULL, NULL, &timeout);
+
+        if (counter == 0) {
+            printPrompt = removeStaleEntriesFromInterestTable(&interestTable);
+        }
+
         //if select goes wrong maybe put a message
         for (; counter > 0; counter--) {
             switch (state) {
