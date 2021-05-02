@@ -393,12 +393,12 @@ int getNodeList(struct sockaddr_in *nodeServer, char *net, struct sockaddr_in *n
     
     token = strtok(buffer, "\n");
 
-    //error: node server sent useless  information
+    //error: recieved malformed expression from node server
     if (sscanf(token, "%s %s", headerBuffer, netBuffer) != 2) {
         close(fd);
         return -4;
     
-      //error: node server sent anti protocol message
+      //error: unxpected response from node server
     } else if (strcmp("NODESLIST", headerBuffer) || strcmp(net, netBuffer)) {
         return -5;
     }
@@ -495,7 +495,7 @@ int reg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *net)
     //error in case of invalid response from node server
     if (strcmp(buffer, "OKREG")) {
         close(fd);
-        return -9;
+        return -5;
     }
 
     close(fd);
@@ -563,7 +563,7 @@ int unreg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *ne
 
     if (strcmp(buffer, "OKUNREG")) {
         close(fd);
-        return -9;
+        return -5;
     }
 
     close(fd);
