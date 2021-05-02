@@ -24,7 +24,7 @@ int getNodeList(struct sockaddr_in *nodeServer, char *net, struct sockaddr_in *n
  * Arguments: nodeServer - Address of node server 
  *            net - net name 
  *            neighbours - struct with all topology information
- * Returns:   0 if ok, negative if error (describe error codes)
+ * Returns:   0 if ok, negative if error (check printErrorMessage utils.c)
  * Side-Effects: 
  *
  * Description: Executes the first part of registration process by choosing,
@@ -93,7 +93,7 @@ int join(struct sockaddr_in *nodeServer, char *net, struct neighbours *neighbour
  * openListner()
  *
  * Arguments: neighbours - struct with all topology information
- * Returns:   0 if ok, negative if error (describe error codes)
+ * Returns:   0 if ok, negative if error (check printErrorMessage utils.c)
  * Side-Effects: 
  *
  * Description: Opens listening socket. 
@@ -134,7 +134,7 @@ int openListener(struct neighbours *neighbours) {
  *            net - net name 
  *            neighbours - struct with all topology information
  *            routingTable - struct with routing table content
- * Returns:   0 if ok, negative if error (describe error codes)
+ * Returns:   0 if ok, negative if error (check printErrorMessage utils.c)
  * Side-Effects: 
  *
  * Description: Executes leave command by terminating all tcp sessions
@@ -188,7 +188,7 @@ int leave(struct sockaddr_in *nodeServer, char *net, struct neighbours *neighbou
  * Arguments: neighbours - struct with all topology information
  *            internalIndex - index of internal that is the target for the 
  *            addrinfo - Address to be sent in EXTERN message
- * Returns:   0 if ok, negative if error (describe error codes)
+ * Returns:   0 if ok, negative if error (check printErrorMessage utils.c)
  * Side-Effects: 
  *
  * Description: Responds to NEW message, in lone register case, by saving 
@@ -222,7 +222,7 @@ int loneNewInternalHandler(struct neighbours *neighbours, int internalIndex, str
  * Arguments: neighbours - struct with all topology information
  *            internalIndex - index of internal that is the target for the 
  *            addrinfo - Address to be sent in EXTERN message
- * Returns:   0 if ok, negative if error (describe error codes)
+ * Returns:   0 if ok, negative if error (check printErrorMessage utils.c)
  * Side-Effects: 
  *
  * Description: Responds to NEW message by saving neighbour information and
@@ -251,7 +251,7 @@ int newInternalHandler(struct neighbours *neighbours, int internalIndex, struct 
  *            addrinfo - Address recieved from EXTERN message
  *            nodeServer - Address of node server  
  *            net - net name 
- * Returns:   0 if ok, negative if error (describe error codes)
+ * Returns:   0 if ok, negative if error (check printErrorMessage utils.c)
  * Side-Effects: 
  *
  * Description: Complete registration process by saving recovery node,
@@ -285,7 +285,7 @@ int finishJoin(struct neighbours *neighbours, struct sockaddr_in *addrinfo, stru
  * Arguments: nodeListSize - Number of nodes registered on node server 
  *            nodeList - Table with the nodes read from node server
  *            neighbours - struct with all topology information
- * Returns:   0 if ok, negative if error (describe error codes)
+ * Returns:   0 if ok, negative if error (check printErrorMessage utils.c)
  * Side-Effects: 
  *
  * Description: Selects and tries to connect to an external neighbour
@@ -334,7 +334,7 @@ int connectToNodeExtern(int nodeListSize, struct sockaddr_in *nodeList, struct n
  * Arguments: nodeServer - Address of node server 
  *            net - net name 
  *            nodeList - Table with the nodes read from node server 
- * Returns:   0 if ok, negative if error (describe error codes)
+ * Returns:   0 if ok, negative if error (check printErrorMessage utils.c)
  * Side-Effects: 
  *
  * Description: Gets nodes registered in node server and stores them in the
@@ -438,7 +438,7 @@ int getNodeList(struct sockaddr_in *nodeServer, char *net, struct sockaddr_in *n
  * Arguments: nodeSelf - Address of itself 
  *            nodeServer - Address of node server
  *            net - net name 
- * Returns:   0 if ok, negative if error (describe error codes)
+ * Returns:   0 if ok, negative if error (check printErrorMessage utils.c)
  * Side-Effects: 
  *
  * Description: Registers in node server
@@ -508,7 +508,7 @@ int reg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *net)
  * Arguments: nodeSelf - Node's own addres info 
  *            nodeServer - Address of node server
  *            net - net name 
- * Returns:   0 if ok, negative if error (describe error codes)
+ * Returns:   0 if ok, negative if error (check printErrorMessage utils.c)
  * Side-Effects: 
  *
  * Description: Unregisters in node server

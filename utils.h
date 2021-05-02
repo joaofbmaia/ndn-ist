@@ -10,5 +10,6 @@ int readTcpStreamToBuffer(int fd, char* readBuffer, int bufferSize);
 char *getMessageFromBuffer(char *buffer);
 void removeInternalFromTable(int internalIndex, struct neighbours *neighbours);
 int fdToIndex(int fd, struct neighbours *neighbours); 
+void printErrorMessage (int errCode);
 
 #endif

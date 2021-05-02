@@ -3,6 +3,7 @@
 #include <string.h>
 #include <sys/select.h>
 #include <unistd.h>
+#include <errno.h>
 #include "neighbours.h"
 
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
@@ -174,4 +175,51 @@ int fdToIndex(int fd, struct neighbours *neighbours) {
     }
     if (neighbours->external.fd == fd) return -1;
     return -2;
+}
+
+/******************************************************************************
+ * printErrorMessage()
+ *
+ * Arguments: errCode - number that identifies error type
+ * Returns:   
+ * Side-Effects: 
+ *
+ * Description: Prints error message depending on error type.
+ *****************************************************************************/
+void printErrorMessage (int errCode){
+    if (errCode == -1){
+        fprintf(stderr, "error: %s\n", strerror(errno));
+    }
+
+    if (errCode == -2){
+        fprintf(stderr, "error: could not send message to node server\n");
+    } 
+
+    if (errCode == -3){
+        fprintf(stderr, "error: node server took too long to respond\n");
+    } 
+    
+    if (errCode == -4){
+        fprintf(stderr, "error: recieved malformed expression from node server\n");
+    } 
+
+    if (errCode == -5){
+        fprintf(stderr, "error: unxpected response from node server\n");
+    } 
+
+    if (errCode == -6){
+        fprintf(stderr, "error: invalid address format read from node server\n");
+    } 
+
+    if (errCode == -7){
+        fprintf(stderr, "error: exceeded number of tries when trying to connect to a node from net\n");
+    }
+
+    if (errCode == -8){
+        fprintf(stderr, "error: failed to connect to specified node\n");
+    }
+
+    if (errCode == -10){
+        fprintf(stderr, "error: failed to connect to recovery node\n");
+    }
 }

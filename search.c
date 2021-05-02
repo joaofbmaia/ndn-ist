@@ -9,7 +9,7 @@
  * createObject()
  *
  * Arguments: objectName - String with the name of the object created
- *            objectTable - Table with all own object information
+ *            objectTable - Table with all own objects information
  * Returns:   0 if ok, -1 if object table is full, 1 if object already exists
  * Side-Effects: 
  *
@@ -40,7 +40,7 @@ int createObject(char *objectSubname, struct objectTable *objectTable, char *id)
  * getObject()
  *
  * Arguments: objectName - String with the name of the object created
- *            objectTable - Table with all own object information
+ *            objectTable - Table with all own objects information
  *            interestTable - Table with all interest requests
  *            cache - Cache containing most recent data
  *            routingTable - Routing table content
@@ -121,7 +121,7 @@ int getObject(char *objectName, struct objectTable *objectTable, struct interest
  * interestHandler()
  *
  * Arguments: objectName - String with the name of the object created
- *            objectTable - Table with all own object information
+ *            objectTable - Table with all own objects information
  *            interestTable - Table with all interest requests
  *            cache - Cache containing most recent data
  *            routingTable - Routing table content
