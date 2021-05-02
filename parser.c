@@ -9,6 +9,19 @@
 
 void argError(void);
 
+/******************************************************************************
+ * argumentParser()
+ *
+ * Arguments: argc - number of arguments introduced on launch
+ *            argv - table with arguments introduced
+ *            nodeSelf - own address info
+ *            nodeServer - address info of node server 
+ * Returns:   
+ * Side-Effects: 
+ *
+ * Description: Parses and validates arguments introduced on    
+ *              program launch.
+ *****************************************************************************/
 void argumentParser(int argc, char *argv[], struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer) {
     int port;
 
@@ -69,22 +82,49 @@ void argumentParser(int argc, char *argv[], struct sockaddr_in *nodeSelf, struct
             argError();
         }
     }
-
     nodeServer->sin_family = AF_INET;
     return;
 }
 
+/******************************************************************************
+ * argError()
+ *
+ * Arguments: 
+ * Returns:   
+ * Side-Effects: 
+ *
+ * Description: Prints error and error message when launching 
+ *              the program wrong.
+ *****************************************************************************/
 void argError(void) {
     fprintf(stderr, "error: %s\n", strerror(errno));
     fprintf(stderr, "usage: ndn IP TCP [regIP] [regUDP]\n");
     exit(errno);
 }
 
+/******************************************************************************
+ * commandParser()
+ *
+ * Arguments: buffer - buffer containing command 
+ *            net - net name
+ *            id - id of node 
+ *            name - subname of the object to create or name of
+ *                   object to get.
+ *            nodeExtern - info of node to connect on join boot 
+ *                         command
+ *            
+ * Returns:   command code 
+ * Side-Effects: 
+ *
+ * Description: Parses and validates user commands written in stdin.
+ *****************************************************************************/
 int commandParser(char *buffer, char *net, char *id, char *name, struct sockaddr_in *nodeExtern) {
     char tokens[6][BUFFER_SIZE];
     int tokenCount;
 
     int port;
+
+    memset(nodeExtern, 0, sizeof *nodeExtern);
 
     tokenCount = sscanf(buffer, "%s %s %s %s %s %s", tokens[0], tokens[1], tokens[2], tokens[3], tokens[4], tokens[5]);
 
@@ -123,7 +163,6 @@ int commandParser(char *buffer, char *net, char *id, char *name, struct sockaddr
             fprintf(stderr, "%s", "error: invalid format\n");
             fprintf(stderr, "%s", "usage: join net id [bootIP bootTCP]\n");
         }
-
     } else if (!strcmp(tokens[0], "create")) {
         if (tokenCount == 2) {
             strcpy(name, tokens[1]);
@@ -159,7 +198,6 @@ int commandParser(char *buffer, char *net, char *id, char *name, struct sockaddr
             fprintf(stderr, "%s", "error: invalid format\n");
             fprintf(stderr, "%s", "usage: show topology,routing,cache]\n");
         }
-
     } else if (!strcmp(tokens[0], "leave")) {
         return CC_LEAVE;
     } else if (!strcmp(tokens[0], "exit")) {
@@ -177,6 +215,21 @@ int commandParser(char *buffer, char *net, char *id, char *name, struct sockaddr
     return CC_ERROR;
 }
 
+/******************************************************************************
+ * messageParser()
+ *
+ * Arguments: buffer - buffer containing command 
+ *            net - net name
+ *            id - id of the node 
+ *            name - subname of the object to create or name of
+ *                   object to get.
+ *            addrinfo - address info sent in the message
+ *            
+ * Returns:   message code
+ * Side-Effects: 
+ *
+ * Description: Parses and validates messages sent by others nneighbours. 
+ *****************************************************************************/
 int messageParser(char *buffer, char *id, char *name, struct sockaddr_in *addrinfo) {
     char tokens[4][BUFFER_SIZE];
     int tokenCount;

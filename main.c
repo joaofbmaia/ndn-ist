@@ -86,13 +86,15 @@ int main(int argc, char *argv[]) {
                             changedState = 1;
                             err = leave(&nodeServer, net, &neighbours, &routingTable, &objectTable, &interestTable, &cache);
                             if (err) {
-                                printf("Erro no unreg do servidor de nós\n");
+                                printf("\nErro no unreg do servidor de nós\n");
                             }
-                            printf("O gigante não consegui entrar :c\n");
+                            printf("\nO gigante não consegui entrar :c\n");
+                            printPrompt = 1;
                             state = notRegistered;
                             break;
                         }
-                        printf("O gigante já entrou!\n");
+                        printf("\nO gigante já entrou!\n");
+                        printPrompt = 1;
                         state = registered;
                         //send ADVERTISE messages
                         err = advertiseToEdge(neighbours.external.fd, &routingTable);
@@ -163,7 +165,7 @@ int main(int argc, char *argv[]) {
                             }
                             break;
                         case MC_DATA:
-                            errFd = dataHandler(messageName, &interestTable, &cache, &routingTable);
+                            errFd = dataHandler(messageName, &interestTable, &cache, &routingTable, &printPrompt);
                             if (errFd) {
                                 state = neighbourDisconnectionHandler(state, fdToIndex(errFd, &neighbours), &neighbours, &routingTable);
                                 changedState = 1;
@@ -171,7 +173,7 @@ int main(int argc, char *argv[]) {
                             }
                             break;
                         case MC_NODATA:
-                            errFd = noDataHandler(messageName, &interestTable, &cache, &routingTable);
+                            errFd = noDataHandler(messageName, &interestTable, &cache, &routingTable, &printPrompt);
                             if (errFd) {
                                 state = neighbourDisconnectionHandler(state, fdToIndex(errFd, &neighbours), &neighbours, &routingTable);
                                 changedState = 1;
@@ -227,7 +229,7 @@ int main(int argc, char *argv[]) {
                                 }
                                 break;
                             case MC_DATA:
-                                errFd = dataHandler(messageName, &interestTable, &cache, &routingTable);
+                                errFd = dataHandler(messageName, &interestTable, &cache, &routingTable, &printPrompt);
                                 if (errFd) {
                                     state = neighbourDisconnectionHandler(state, fdToIndex(errFd, &neighbours), &neighbours, &routingTable);
                                     changedState = 1;
@@ -235,7 +237,7 @@ int main(int argc, char *argv[]) {
                                 }
                                 break;
                             case MC_NODATA:
-                                errFd = noDataHandler(messageName, &interestTable, &cache, &routingTable);
+                                errFd = noDataHandler(messageName, &interestTable, &cache, &routingTable, &printPrompt);
                                 if (errFd) {
                                     state = neighbourDisconnectionHandler(state, fdToIndex(errFd, &neighbours), &neighbours, &routingTable);
                                     changedState = 1;
@@ -264,13 +266,14 @@ int main(int argc, char *argv[]) {
                                 state = neighbourDisconnectionHandler(registered, -1, &neighbours, &routingTable);
                             }
                             if (state == notRegistered) {
-                                printf("smthing wong\n");
+                                printf("\nsmthing wong\n");
                                 err = leave(&nodeServer, net, &neighbours, &routingTable, &objectTable, &interestTable, &cache);
                                 if (!err) {
                                     printf("O gigante já saiu!\n");
                                 } else {
                                     printf("error: %d\n", err);
                                 }
+                                printPrompt = 1;
                                 break;
                             }
                             changedState = 1;
@@ -295,7 +298,7 @@ int main(int argc, char *argv[]) {
                             }
                             break;
                         case MC_DATA:
-                            errFd = dataHandler(messageName, &interestTable, &cache, &routingTable);
+                            errFd = dataHandler(messageName, &interestTable, &cache, &routingTable, &printPrompt);
                             if (errFd) {
                                 state = neighbourDisconnectionHandler(state, fdToIndex(errFd, &neighbours), &neighbours, &routingTable);
                                 changedState = 1;
@@ -303,7 +306,7 @@ int main(int argc, char *argv[]) {
                             }
                             break;
                         case MC_NODATA:
-                            errFd = noDataHandler(messageName, &interestTable, &cache, &routingTable);
+                            errFd = noDataHandler(messageName, &interestTable, &cache, &routingTable, &printPrompt);
                             if (errFd) {
                                 state = neighbourDisconnectionHandler(state, fdToIndex(errFd, &neighbours), &neighbours, &routingTable);
                                 changedState = 1;
@@ -326,7 +329,7 @@ int main(int argc, char *argv[]) {
                             case MC_NEW:
                                 err = newInternalHandler(&neighbours, i, &messageAddrInfo);
                                 if (err) {
-                                    printf("error: connection attempt from internal node failed\n");
+                                    state = neighbourDisconnectionHandler(state, i, &neighbours, &routingTable);
                                     changedState = 1;
                                     break;
                                 }
@@ -353,7 +356,7 @@ int main(int argc, char *argv[]) {
                                 }
                                 break;
                             case MC_DATA:
-                                errFd = dataHandler(messageName, &interestTable, &cache, &routingTable);
+                                errFd = dataHandler(messageName, &interestTable, &cache, &routingTable, &printPrompt);
                                 if (errFd) {
                                     state = neighbourDisconnectionHandler(state, fdToIndex(errFd, &neighbours), &neighbours, &routingTable);
                                     changedState = 1;
@@ -361,7 +364,7 @@ int main(int argc, char *argv[]) {
                                 }
                                 break;
                             case MC_NODATA:
-                                errFd = noDataHandler(messageName, &interestTable, &cache, &routingTable);
+                                errFd = noDataHandler(messageName, &interestTable, &cache, &routingTable, &printPrompt);
                                 if (errFd) {
                                     state = neighbourDisconnectionHandler(state, fdToIndex(errFd, &neighbours), &neighbours, &routingTable);
                                     changedState = 1;
@@ -394,7 +397,7 @@ int main(int argc, char *argv[]) {
         counter = select(maxfd + 1, &rfds, NULL, NULL, &timeout);
 
         if (counter == 0) {
-            printPrompt = removeStaleEntriesFromInterestTable(&interestTable);
+            removeStaleEntriesFromInterestTable(&interestTable, &printPrompt);
         }
 
         //if select goes wrong maybe put a message
@@ -555,8 +558,10 @@ int main(int argc, char *argv[]) {
                                 break;
                             case CC_CREATE:
                                 err = createObject(commandName, &objectTable, id);
-                                if (err) {
+                                if (err == -1) {
                                     printf("error: no space for more objects\n");
+                                } else if (err == 1) {
+                                    printf("error: object already exists, but thanks for reminding me 😊\n");
                                 } else {
                                     printf("successfully created object %s.%s\n", id, commandName);
                                 }
@@ -658,8 +663,10 @@ int main(int argc, char *argv[]) {
                                 break;
                             case CC_CREATE:
                                 err = createObject(commandName, &objectTable, id);
-                                if (err) {
+                                if (err == -1) {
                                     printf("error: no space for more objects\n");
+                                } else if (err == 1) {
+                                    printf("error: object already exists\n");
                                 } else {
                                     printf("successfully created object %s.%s\n", id, commandName);
                                 }

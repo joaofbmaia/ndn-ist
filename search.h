@@ -33,10 +33,10 @@ struct cache{
 int createObject(char *objectSubName, struct objectTable *objectTable, char *id);
 int getObject(char *objectName, struct objectTable *objectTable, struct interestTable *interestTable, struct cache *cache, struct routingTable *routingTable);
 int interestHandler(char *objectName, struct objectTable *objectTable, struct interestTable *interestTable, struct cache *cache, struct routingTable *routingTable, int sourceEdge);
-int dataHandler(char *objectName, struct interestTable *interestTable, struct cache *cache, struct routingTable *routingTable);
-int noDataHandler(char *objectName, struct interestTable *interestTable, struct cache *cache, struct routingTable *routingTable);
+int dataHandler(char *objectName, struct interestTable *interestTable, struct cache *cache, struct routingTable *routingTable, int *writtenToStdin);
+int noDataHandler(char *objectName, struct interestTable *interestTable, struct cache *cache, struct routingTable *routingTable, int *writtenToStdin);
 void removeFromInterestTable(char *objectName, struct interestTable *interestTable);
-int removeStaleEntriesFromInterestTable(struct interestTable *interestTable);
+void removeStaleEntriesFromInterestTable(struct interestTable *interestTable, int *writtenToStdin);
 void pushToCache(struct object *object, struct cache *cache);
 struct object *retrieveFromCache(char *name, struct cache *cache);
 void showCache(struct cache *cache);

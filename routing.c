@@ -38,9 +38,9 @@ int advertiseToEdge(int edge, struct routingTable *routingTable) {
  * Arguments: originEdge - File descriptor that describes message origin edge
  *            id - id of the node to be advertised 
  *            routingTable - Struct with routung table content
- *            state - state to which the state machine has to progress
+ *            state - state of the event loop
  *            neighbours - struct with all topology information
- * Returns:   The state to which the state machine progresses
+ * Returns:   The state to which the event loop progresses
  * Side-Effects: 
  *
  * Description: Spreads ADVERTISE message through ou the network
@@ -93,9 +93,9 @@ enum state broadcastAdvertise(int originEdge, char *id, struct routingTable *rou
  * Arguments: originEdge - File descriptor that describes message origin edge
  *            id - id of the node to be advertised 
  *            routingTable - Struct with routung table content
- *            state - state to which the state machine has to progress
+ *            state - state of the event loop
  *            neighbours - struct with all topology information
- * Returns:   The state to which the state machine progresses
+ * Returns:   The state to which the event loop progresses
  * Side-Effects: 
  *
  * Description: Spreads WITHDRAW message through ou the network
@@ -147,9 +147,9 @@ enum state broadcastWithdraw(int originEdge, char *id, struct routingTable *rout
  *
  * Arguments: edge - File descriptor that describes edge to be removed
  *            routingTable - Struct with routung table content 
- *            state - state to which the state machine has to progress
+ *            state - state of the event loop
  *            neighbours - struct with all topology information
- * Returns:   The state to which the state machine progresses
+ * Returns:   The state to which the event loop progresses
  * Side-Effects: 
  *
  * Description: Informs net about all nodes to be removed from routing table

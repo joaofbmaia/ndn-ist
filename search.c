@@ -10,18 +10,27 @@
  *
  * Arguments: objectName - String with the name of the object created
  *            objectTable - Table with all own object information
- * Returns:   0 if ok, -1 if object table is full
+ * Returns:   0 if ok, -1 if object table is full, 1 if object already exists
  * Side-Effects: 
  *
  * Description: Puts created object into object table 
- *
  *****************************************************************************/
 int createObject(char *objectSubname, struct objectTable *objectTable, char *id) {
     char nameBuffer[BUFFER_SIZE];
+    //check if object table is full
     if (objectTable->size == MAX_OBJECTS) {
         return -1;
     }
+
     sprintf(nameBuffer, "%s.%s", id, objectSubname);
+
+    //check if object already exists 
+    for (int i = 0; i < objectTable->size; i++){
+        if (!strcmp(objectTable->entry[i].name, nameBuffer)){
+            return 1; 
+        }
+    }
+    //saves object to oobject table
     strcpy(objectTable->entry[objectTable->size].name, nameBuffer);
     objectTable->size++;
     return 0;
@@ -96,7 +105,6 @@ int getObject(char *objectName, struct objectTable *objectTable, struct interest
 
     err = writeBufferToTcpStream(destEdge, writeBuffer);
     if (err) {
-        printf("error: destinantion unreachable\n");
         return destEdge;
     }
 
@@ -204,7 +212,6 @@ int interestHandler(char *objectName, struct objectTable *objectTable, struct in
 
     err = writeBufferToTcpStream(destEdge, writeBuffer);
     if (err) {
-        printf("error: destinantion unreachable\n");
         return destEdge;
     }
 
@@ -224,6 +231,7 @@ int interestHandler(char *objectName, struct objectTable *objectTable, struct in
  *            interestTable - Table with all interest requests
  *            cache - Cache containing most recent data
  *            routingTable - Routing table content
+ *            writtenToStdin - flag written to 1 if stdin is written
  * Returns:   0 if ok, destEdge if error in write
  * Side-Effects: 
  *
@@ -231,7 +239,7 @@ int interestHandler(char *objectName, struct objectTable *objectTable, struct in
  *              interest table, if located store data in cache and if 
  *              not recipient of data, foward data to destination.
  *****************************************************************************/
-int dataHandler(char *objectName, struct interestTable *interestTable, struct cache *cache, struct routingTable *routingTable) {
+int dataHandler(char *objectName, struct interestTable *interestTable, struct cache *cache, struct routingTable *routingTable, int *writtenToStdin) {
     char writeBuffer[BUFFER_SIZE + 16];
     int destEdge = -1, err;
 
@@ -257,6 +265,7 @@ int dataHandler(char *objectName, struct interestTable *interestTable, struct ca
     //DATA is for me? 👉😳👈
     if (destEdge == 0) {
         printf("\nReceived object: %s\n", data.name);
+        *writtenToStdin = 1;
         return 0;
     }
 
@@ -278,6 +287,7 @@ int dataHandler(char *objectName, struct interestTable *interestTable, struct ca
  *            interestTable - Table with all interest requests
  *            cache - Cache containing most recent data
  *            routingTable - Routing table content
+ *            writtenToStdin - flag written to 1 if stdin is written
  * Returns:   0 if ok, destEdge if error in write
  * Side-Effects: 
  *
@@ -285,7 +295,7 @@ int dataHandler(char *objectName, struct interestTable *interestTable, struct ca
  *              interest table if not recipient of message, foward it to 
  *              destination.
  *****************************************************************************/
-int noDataHandler(char *objectName, struct interestTable *interestTable, struct cache *cache, struct routingTable *routingTable) {
+int noDataHandler(char *objectName, struct interestTable *interestTable, struct cache *cache, struct routingTable *routingTableint, int *writtenToStdin) {
     char writeBuffer[BUFFER_SIZE + 16];
     int destEdge = -1, err;
 
@@ -306,6 +316,7 @@ int noDataHandler(char *objectName, struct interestTable *interestTable, struct 
     //NODATA is for me? 👉😳👈
     if (destEdge == 0) {
         printf("\nNo object found 🤔\n");
+        *writtenToStdin = 1;
         return 0;
     }
 
@@ -329,7 +340,6 @@ int noDataHandler(char *objectName, struct interestTable *interestTable, struct 
  * Side-Effects: 
  *
  * Description: Finds and removes an object from the interest table
- *
  *****************************************************************************/
 void removeFromInterestTable(char *objectName, struct interestTable *interestTable) {
     for (int i = 0; i < interestTable->size; i++) {
@@ -348,6 +358,7 @@ void removeFromInterestTable(char *objectName, struct interestTable *interestTab
  * removeStaleEntriesFromInterestTable()
  *
  * Arguments: interestTable - Table with all interest requests
+ *            writtenToStdin - flag written to 1 if stdin is written
  * Returns:   Flag print promt 1 if a message is printedor 0 if
  *            not
  * Side-Effects: 
@@ -355,20 +366,18 @@ void removeFromInterestTable(char *objectName, struct interestTable *interestTab
  * Description: Finds and removes an object from the interest table
  *              after not recieving an answer for a certain time.
  *****************************************************************************/
-int removeStaleEntriesFromInterestTable(struct interestTable *interestTable) {
-    int printPrompt = 0;
+void removeStaleEntriesFromInterestTable(struct interestTable *interestTable, int *writtenToStdin) {
     time_t now = time(NULL);
     for (int i = 0; i < interestTable->size; i++) {
         if ((now - interestTable->entry[i].creationTime) > INTEREST_TIMEOUT) {
             if (interestTable->entry[i].sourceEdge == 0) {
                 printf("\nInterest message for object %s timed out with no response 😱\n", interestTable->entry[i].name);
-                printPrompt = 1;
+                *writtenToStdin = 1;
             }
             removeFromInterestTable(interestTable->entry[i].name, interestTable);
             i--;
         }
     }
-    return printPrompt;
 }
 
 
@@ -420,7 +429,6 @@ struct object *retrieveFromCache(char *name, struct cache *cache) {
  * Side-Effects: 
  *
  * Description: Prints cache content 
- *
  *****************************************************************************/
 void showCache(struct cache *cache) {
     if (cache->size == 0) {

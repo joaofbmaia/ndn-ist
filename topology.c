@@ -353,8 +353,6 @@ int getNodeList(struct sockaddr_in *nodeServer, char *net, struct sockaddr_in *n
     fd_set rfds;
     struct timeval timeout;
 
-    socklen_t addrlen;
-
     timeout.tv_usec = 0;
     timeout.tv_sec = SEL_TIMEOUT;
     //Opens socket
@@ -374,6 +372,7 @@ int getNodeList(struct sockaddr_in *nodeServer, char *net, struct sockaddr_in *n
 
     //sets a timeout for the node server response
     ret = select(fd + 1, &rfds, NULL, NULL, &timeout);
+    //error: node server timed out
     if (ret == 0) {
         close(fd);
         return -3;
@@ -383,8 +382,7 @@ int getNodeList(struct sockaddr_in *nodeServer, char *net, struct sockaddr_in *n
     }
     
     //recieves message from node server 
-    addrlen = sizeof(*nodeServer);
-    n = recvfrom(fd, buffer, BUFFER_SIZE - 1, 0, (struct sockaddr *) nodeServer, &addrlen);
+    n = recvfrom(fd, buffer, BUFFER_SIZE - 1, 0, NULL, NULL);
     if (n == -1) {
         close(fd);
         return -1;
@@ -395,10 +393,12 @@ int getNodeList(struct sockaddr_in *nodeServer, char *net, struct sockaddr_in *n
     
     token = strtok(buffer, "\n");
 
+    //error: node server sent useless  information
     if (sscanf(token, "%s %s", headerBuffer, netBuffer) != 2) {
         close(fd);
         return -4;
-
+    
+      //error: node server sent anti protocol message
     } else if (strcmp("NODESLIST", headerBuffer) || strcmp(net, netBuffer)) {
         return -5;
     }
@@ -451,8 +451,6 @@ int reg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *net)
     fd_set rfds;
     struct timeval timeout;
 
-    socklen_t addrlen;
-
     timeout.tv_usec = 0;
     timeout.tv_sec = SEL_TIMEOUT;
 
@@ -463,6 +461,8 @@ int reg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *net)
     //send registration message to node server
     sprintf(buffer, "REG %s %s %d", net, inet_ntop(AF_INET, &nodeSelf->sin_addr, addrBuffer, sizeof addrBuffer), ntohs(nodeSelf->sin_port));
     n = sendto(fd, buffer, strlen(buffer), 0, (struct sockaddr *) nodeServer, sizeof(*nodeServer));
+
+    //error sending message to node server 
     if (n != strlen(buffer)) {
         close(fd);
         return -2;
@@ -474,6 +474,7 @@ int reg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *net)
     //sets a timeout for the node server response
     ret = select(fd + 1, &rfds, NULL, NULL, &timeout);
     
+    //error: node server timed out 
     if (ret == 0) {
         close(fd);
         return -3;
@@ -483,8 +484,7 @@ int reg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *net)
     }
 
     //recieves message from node server
-    addrlen = sizeof(*nodeServer);
-    n = recvfrom(fd, buffer, BUFFER_SIZE - 1, 0, (struct sockaddr *) nodeServer, &addrlen);
+    n = recvfrom(fd, buffer, BUFFER_SIZE - 1, 0, NULL, NULL);
     if (n == -1) {
         close(fd);
         return -1;
@@ -521,8 +521,6 @@ int unreg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *ne
     fd_set rfds;
     struct timeval timeout;
 
-    socklen_t addrlen;
-
     timeout.tv_usec = 0;
     timeout.tv_sec = SEL_TIMEOUT;
 
@@ -533,6 +531,8 @@ int unreg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *ne
     //send unregistration message to node server
     sprintf(buffer, "UNREG %s %s %d", net, inet_ntop(AF_INET, &nodeSelf->sin_addr, addrBuffer, sizeof addrBuffer), ntohs(nodeSelf->sin_port));
     n = sendto(fd, buffer, strlen(buffer), 0, (struct sockaddr *) nodeServer, sizeof(*nodeServer));
+
+    //error sending message to node server
     if (n != strlen(buffer)) {
         close(fd);
         return -2;
@@ -543,6 +543,8 @@ int unreg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *ne
 
     //If the node server takes more than 3 secs to answer too bad
     ret = select(fd + 1, &rfds, NULL, NULL, &timeout);
+
+    //error: node server timed out 
     if (ret == 0) {
         close(fd);
         return -3;
@@ -551,8 +553,7 @@ int unreg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *ne
         return -1;
     }
 
-    addrlen = sizeof(*nodeServer);
-    n = recvfrom(fd, buffer, BUFFER_SIZE - 1, 0, (struct sockaddr *) nodeServer, &addrlen);
+    n = recvfrom(fd, buffer, BUFFER_SIZE - 1, 0, NULL, NULL);
     if (n == -1) {
         close(fd);
         return -1;
@@ -630,6 +631,18 @@ void promoteRandomInternalToExternal(struct neighbours *neighbours) {
     neighbours->external.addrressInfo = neighbours->internal[internalIndex].addrressInfo;
 }
 
+/******************************************************************************
+ * bradcastExtern()
+ *
+ * Arguments: state - state of the event loop
+ *            neighbours - struct with all topology information
+ *            routingTable - Struct with routung table content
+ * Returns:   The state to which the event loop progresses
+ * Side-Effects: 
+ *
+ * Description: Spreads EXTERN message to  internal neighbours to
+ *              update topology.
+ *****************************************************************************/
 enum state broadcastExtern(enum state state, struct neighbours *neighbours, struct routingTable *routingTable) {
     char writeBuffer[BUFFER_SIZE];
     char addrBuffer[INET_ADDRSTRLEN];
@@ -670,7 +683,7 @@ enum state broadcastExtern(enum state state, struct neighbours *neighbours, stru
  * Returns:   0 if ok, -1 if error 
  * Side-Effects: 
  *
- * Description: Connects to re
+ * Description: Connects to recovery node and sends NEW message.
  *****************************************************************************/
 int connectToRecovery(struct neighbours *neighbours) {
     int err;
@@ -706,15 +719,30 @@ int connectToRecovery(struct neighbours *neighbours) {
  *
  * Arguments: neighbours - struct with all topology information
  *            addrinfo - Address read in EXTERN message recieved
- * Returns:   0 if ok, -1 if error 
+ * Returns:   
  * Side-Effects: 
  *
- * Description: Connects to re
+ * Description: Updates recovery neighbour info after recieving 
+ *              message EXTERNAL.
  *****************************************************************************/
 void externMessageHandler(struct neighbours *neighbours, struct sockaddr_in *addrinfo) {
     neighbours->recovery.addrressInfo = *addrinfo;
 }
 
+/******************************************************************************
+ * neighbourDisconnectionHandler()
+ *
+ * Arguments: state - state of the event loop
+ *            neighbourIndex - index of the neighbour to be removed
+ *                              if -1, i is the external neighbour
+ *            neighbours - struct with all topology information
+ *            routingTable - Struct with routung table content
+ * Returns:   The state to which the event loop progresses
+ * Side-Effects: 
+ *
+ * Description: Removes nodes depending on the state, keeping the
+ *              net connected. 
+ *****************************************************************************/
 enum state neighbourDisconnectionHandler(enum state state, int neighbourIndex, struct neighbours *neighbours, struct routingTable *routingTable) {
     int err;
     enum state newState = state;

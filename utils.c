@@ -7,8 +7,18 @@
 
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
-/*Sets fds and returns max fd
-Write complete header at a later stage*/
+
+/******************************************************************************
+ * setFds()
+ *
+ * Arguments: rfds - read file descriptor set
+ *            neighbours - struct with all topology information
+ * Returns:   File descriptor with highest numerical value
+ * Side-Effects: 
+ *
+ * Description: Puts the appropriate file descriptors in set
+ *              and indetefies the maximum file descriptor.
+ *****************************************************************************/
 int setFds(fd_set *rfds, struct neighbours *neighbours) {
     int maxFd;
     //sets stdin fd
@@ -32,8 +42,16 @@ int setFds(fd_set *rfds, struct neighbours *neighbours) {
     return maxFd;
 }
 
-/*writes message 
-Write header at a later stage*/
+/******************************************************************************
+ * writeBufferToTcpSream()
+ *
+ * Arguments: fd - target file descriptor
+ *            writeBuffer - buffer with the message to be written
+ * Returns:   0 if ok or -1 if error
+ * Side-Effects: 
+ *
+ * Description: Writes a message to a tcp stream.
+ *****************************************************************************/
 int writeBufferToTcpStream(int fd, char *writeBuffer) {
     int bytesLeft = strlen(writeBuffer);
     int bytesWritten = 0;
@@ -51,8 +69,18 @@ int writeBufferToTcpStream(int fd, char *writeBuffer) {
     return 0;
 }
 
-/*Reads message to read buffer
-Write header at a later stage*/
+
+/******************************************************************************
+ * readTcpSreamTBuffer()
+ *
+ * Arguments: fd - target file descriptor
+ *            readBuffer - buffer with the message to be read
+ *            bufferSize - read buffer size
+ * Returns:   0 if ok, -1 if error, or 1 if zero bytes read
+ * Side-Effects: 
+ *
+ * Description: Reads a message from a tcp stream.
+ *****************************************************************************/
 int readTcpStreamToBuffer(int fd, char *readBuffer, int bufferSize) {
     int bytesRead;
     char *stringTerminatorLocation;
@@ -74,8 +102,15 @@ int readTcpStreamToBuffer(int fd, char *readBuffer, int bufferSize) {
     return 0;
 }
 
-/*Gets a full message from the read buffer
-Write header at a later stage*/
+/******************************************************************************
+ * writeBufferToTcpSream()
+ *
+ * Arguments: buffer - buffer containing the message
+ * Returns:   message retrieved
+ * Side-Effects: 
+ *
+ * Description: Retrives a message from a buffer.
+ *****************************************************************************/
 char *getMessageFromBuffer(char *buffer) {
     int messageSize;
     char *newlineLocation;
@@ -103,6 +138,17 @@ char *getMessageFromBuffer(char *buffer) {
     return message;
 }
 
+/******************************************************************************
+ * removeInternalFromTable()
+ *
+ * Arguments: internalIndex - index of internal to be removed
+ *            neighbours - struct with all topology information
+ * Returns:   
+ * Side-Effects: 
+ *
+ * Description: Removes an internal neighbour from the table of
+ *              internals.
+ *****************************************************************************/
 void removeInternalFromTable(int internalIndex, struct neighbours *neighbours) {
     for(int  i = internalIndex + 1; i < neighbours->numberOfInternals; i++) {
         neighbours->internal[i - 1] = neighbours->internal[i];
@@ -111,6 +157,17 @@ void removeInternalFromTable(int internalIndex, struct neighbours *neighbours) {
     neighbours->numberOfInternals--;
 }
 
+/******************************************************************************
+ * fdToIndex()
+ *
+ * Arguments: fd - file descriptor to be converted
+ *            neighbours - struct with all topology information
+ * Returns:   index of the converted file descriptor
+ * Side-Effects: 
+ *
+ * Description: Converts a file descriptor into an index for the 
+ *              table of internals.
+ *****************************************************************************/
 int fdToIndex(int fd, struct neighbours *neighbours) {
     for (int i = 0; i < neighbours->numberOfInternals; i++) {
         if (neighbours->internal[i].fd == fd) return i;
