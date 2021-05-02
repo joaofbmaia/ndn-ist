@@ -4,9 +4,10 @@
 #include <arpa/inet.h>
 #include "neighbours.h"
 #include "routing.h"
+#include "search.h"
 
 int join(struct sockaddr_in *nodeServer, char *net, struct neighbours *neighbours, char *id, struct routingTable *routingTable);
-int leave(struct sockaddr_in *nodeServer, char *net, struct neighbours *neighbours, struct routingTable *routingTable);
+int leave(struct sockaddr_in *nodeServer, char *net, struct neighbours *neighbours, struct routingTable *routingTable, struct objectTable *objectTable, struct interestTable *interestTable, struct cache *cache);
 int loneNewInternalHandler(struct neighbours *neighbours, int internalIndex, struct sockaddr_in *addrinfo);
 int newInternalHandler(struct neighbours *neighbours, int internalIndex, struct sockaddr_in *addrinfo);
 int finishJoin(struct neighbours *neighbours, struct sockaddr_in *addrinfo, struct sockaddr_in *nodeServer, char *net);

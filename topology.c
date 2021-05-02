@@ -12,6 +12,7 @@
 #include "routing.h"
 #include "states.h"
 #include "utils.h"
+#include "search.h"
 
 int openListener(struct neighbours *neighbours);
 int connectToNodeExtern(int nodeListSize, struct sockaddr_in *nodeList, struct neighbours *neighbours);
@@ -20,16 +21,15 @@ int getNodeList(struct sockaddr_in *nodeServer, char *net, struct sockaddr_in *n
 /******************************************************************************
  * join()
  *
- * Arguments: nodeServer - Ip and port of node server 
+ * Arguments: nodeServer - Address of node server 
  *            net - net name 
  *            neighbours - struct with all topology information
  * Returns:   0 if ok, negative if error (describe error codes)
  * Side-Effects: 
  *
- * Description: executes the first part of registration process by choosing,
+ * Description: Executes the first part of registration process by choosing,
  *              connecting and sending message "NEW" to the external neighbour  
  *****************************************************************************/
-
 int join(struct sockaddr_in *nodeServer, char *net, struct neighbours *neighbours, char *id, struct routingTable *routingTable) {
     int nodeListSize = 1;
     int err;
@@ -89,6 +89,15 @@ int join(struct sockaddr_in *nodeServer, char *net, struct neighbours *neighbour
     return 0;
 }
 
+/******************************************************************************
+ * openListner()
+ *
+ * Arguments: neighbours - struct with all topology information
+ * Returns:   0 if ok, negative if error (describe error codes)
+ * Side-Effects: 
+ *
+ * Description: Opens listening socket. 
+ *****************************************************************************/
 int openListener(struct neighbours *neighbours) {
     int err;
 
@@ -111,9 +120,21 @@ int openListener(struct neighbours *neighbours) {
     return 0;
 }
 
-/*Executes leave command
-Write complete header at a later stage*/
-int leave(struct sockaddr_in *nodeServer, char *net, struct neighbours *neighbours, struct routingTable *routingTable) {
+
+/******************************************************************************
+ * leave()
+ *
+ * Arguments: nodeServer - Address of node server 
+ *            net - net name 
+ *            neighbours - struct with all topology information
+ *            routingTable - struct with routing table content
+ * Returns:   0 if ok, negative if error (describe error codes)
+ * Side-Effects: 
+ *
+ * Description: Executes leave command by terminating all tcp sessions
+ *              and reseting all the structers.
+ *****************************************************************************/
+int leave(struct sockaddr_in *nodeServer, char *net, struct neighbours *neighbours, struct routingTable *routingTable, struct objectTable *objectTable, struct interestTable *interestTable, struct cache *cache) {
     int err;
 
     //close fds
@@ -144,12 +165,31 @@ int leave(struct sockaddr_in *nodeServer, char *net, struct neighbours *neighbou
 
     //reset routing table
     memset(routingTable, 0, sizeof *routingTable);
+    //mandar o resto das tabelas para dar memeset
+
+    //reset objects
+    memset(objectTable, 0, sizeof *objectTable);
+    memset(interestTable, 0, sizeof *interestTable);
+    memset(cache, 0, sizeof *cache);
 
     return 0;
 }
 
-/*Processes NEW message in loneRegister case
-Write complete header at a later stage*/
+
+/******************************************************************************
+ * loneNewInternalHandler()
+ *
+ * Arguments: neighbours - struct with all topology information
+ *            internalIndex - index of internal that is the target for the 
+ *            addrinfo - Address to be sent in EXTERN message
+ * Returns:   0 if ok, negative if error (describe error codes)
+ * Side-Effects: 
+ *
+ * Description: Responds to NEW message, in lone register case, by saving 
+ *              neighbour information, promoting it to external neighbour
+ *              and sending EXTERN message to neighbour trying to connect.
+ * 
+ *****************************************************************************/
 int loneNewInternalHandler(struct neighbours *neighbours, int internalIndex, struct sockaddr_in *addrinfo) {
     char writeBuffer[BUFFER_SIZE];
     char addrBuffer[INET_ADDRSTRLEN];
@@ -169,8 +209,20 @@ int loneNewInternalHandler(struct neighbours *neighbours, int internalIndex, str
     return err;
 }
 
-/*Processes NEW message in Register case
-Write complete header at a later stage*/
+
+/******************************************************************************
+ * newInternalHandler()
+ *
+ * Arguments: neighbours - struct with all topology information
+ *            internalIndex - index of internal that is the target for the 
+ *            addrinfo - Address to be sent in EXTERN message
+ * Returns:   0 if ok, negative if error (describe error codes)
+ * Side-Effects: 
+ *
+ * Description: Responds to NEW message by saving neighbour information and
+ *              sending EXTERN message to neighbour. 
+ *
+ *****************************************************************************/
 int newInternalHandler(struct neighbours *neighbours, int internalIndex, struct sockaddr_in *addrinfo) {
     char writeBuffer[BUFFER_SIZE];
     char addrBuffer[INET_ADDRSTRLEN];
@@ -186,6 +238,20 @@ int newInternalHandler(struct neighbours *neighbours, int internalIndex, struct 
     return err;
 }
 
+/******************************************************************************
+ * finishJoin()
+ *
+ * Arguments: neighbours - struct with all topology information
+ *            addrinfo - Address recieved from EXTERN message
+ *            nodeServer - Address of node server  
+ *            net - net name 
+ * Returns:   0 if ok, negative if error (describe error codes)
+ * Side-Effects: 
+ *
+ * Description: Complete registration process by saving recovery node,
+ *              opening listener and registering on node server.
+ * 
+ *****************************************************************************/
 int finishJoin(struct neighbours *neighbours, struct sockaddr_in *addrinfo, struct sockaddr_in *nodeServer, char *net) {
     int err;
 
@@ -207,9 +273,18 @@ int finishJoin(struct neighbours *neighbours, struct sockaddr_in *addrinfo, stru
     return 0;
 }
 
-/*Chooses node from node list and connects to external neighbour joining the net
-Return value: returns error code
-Write complete header at a later stage */
+/******************************************************************************
+ * connectToNodeExtern()
+ *
+ * Arguments: nodeListSize - Number of nodes registered on node server 
+ *            nodeList - Table with the nodes read from node server
+ *            neighbours - struct with all topology information
+ * Returns:   0 if ok, negative if error (describe error codes)
+ * Side-Effects: 
+ *
+ * Description: Selects and tries to connect to an external neighbour
+ *              read from node server.
+ *****************************************************************************/
 int connectToNodeExtern(int nodeListSize, struct sockaddr_in *nodeList, struct neighbours *neighbours) {
     int err, nodeIndex;
     int triesRemaining = MAX_CONNECT_ATTEMPTS;
@@ -247,9 +322,18 @@ int connectToNodeExtern(int nodeListSize, struct sockaddr_in *nodeList, struct n
     return 0;
 }
 
-/*Gets node list from node server
-Return Value: List size or error code
-Write header at a later stage*/
+/******************************************************************************
+ * getNodeList()
+ *
+ * Arguments: nodeServer - Address of node server 
+ *            net - net name 
+ *            nodeList - Table with the nodes read from node server 
+ * Returns:   0 if ok, negative if error (describe error codes)
+ * Side-Effects: 
+ *
+ * Description: Gets nodes registered in node server and stores them in the
+ *              node list.
+ *****************************************************************************/
 int getNodeList(struct sockaddr_in *nodeServer, char *net, struct sockaddr_in *nodeList) {
     int fd, n, ret, counter;
     char buffer[BUFFER_SIZE];
@@ -282,6 +366,7 @@ int getNodeList(struct sockaddr_in *nodeServer, char *net, struct sockaddr_in *n
     FD_ZERO(&rfds);
     FD_SET(fd, &rfds);
 
+    //sets a timeout for the node server response
     ret = select(fd + 1, &rfds, NULL, NULL, &timeout);
     if (ret == 0) {
         close(fd);
@@ -290,7 +375,8 @@ int getNodeList(struct sockaddr_in *nodeServer, char *net, struct sockaddr_in *n
         close(fd);
         return -1;
     }
-
+    
+    //recieves message from node server 
     addrlen = sizeof(*nodeServer);
     n = recvfrom(fd, buffer, BUFFER_SIZE - 1, 0, (struct sockaddr *) nodeServer, &addrlen);
     if (n == -1) {
@@ -300,6 +386,7 @@ int getNodeList(struct sockaddr_in *nodeServer, char *net, struct sockaddr_in *n
 
     buffer[n] = '\0';
 
+    
     token = strtok(buffer, "\n");
 
     if (sscanf(token, "%s %s", headerBuffer, netBuffer) != 2) {
@@ -309,7 +396,7 @@ int getNodeList(struct sockaddr_in *nodeServer, char *net, struct sockaddr_in *n
     } else if (strcmp("NODESLIST", headerBuffer) || strcmp(net, netBuffer)) {
         return -5;
     }
-
+    //Divides string read to separate each individual registered node
     counter = 0;
     token = strtok(NULL, "\n");
     while (token != NULL) {
@@ -318,26 +405,38 @@ int getNodeList(struct sockaddr_in *nodeServer, char *net, struct sockaddr_in *n
         if (ret != 2) {
             return -6;
         }
+        //vallidate ip recieved
         if (!inet_pton(AF_INET, ip, (&nodeList[counter].sin_addr))) {
             return -6;
         }
-
+        //validate port recieved
         if (port < 1 || port > 65536) {
             return -6;
         }
+        //stores node in node list
         nodeList[counter].sin_port = htons(port);
 
         nodeList[counter].sin_family = AF_INET;
-
-        counter++;
+        
+        //increments node counter
+        counter++;  
         token = strtok(NULL, "\n");
     }
 
     return counter;
 }
 
-/*Confirms registration on node Server
-Write header at a later stage*/
+/******************************************************************************
+ * reg()
+ *
+ * Arguments: nodeSelf - Address of itself 
+ *            nodeServer - Address of node server
+ *            net - net name 
+ * Returns:   0 if ok, negative if error (describe error codes)
+ * Side-Effects: 
+ *
+ * Description: Registers in node server
+ *****************************************************************************/
 int reg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *net) {
     int fd, n, ret;
     char buffer[BUFFER_SIZE];
@@ -366,8 +465,9 @@ int reg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *net)
     FD_ZERO(&rfds);
     FD_SET(fd, &rfds);
 
+    //sets a timeout for the node server response
     ret = select(fd + 1, &rfds, NULL, NULL, &timeout);
-    //error in case node server takes more than 3 secs to respond
+    
     if (ret == 0) {
         close(fd);
         return -3;
@@ -376,6 +476,7 @@ int reg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *net)
         return -1;
     }
 
+    //recieves message from node server
     addrlen = sizeof(*nodeServer);
     n = recvfrom(fd, buffer, BUFFER_SIZE - 1, 0, (struct sockaddr *) nodeServer, &addrlen);
     if (n == -1) {
@@ -395,8 +496,17 @@ int reg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *net)
     return 0;
 }
 
-/*Confirms unregistration on node Server
-Write header at a later stage*/
+/******************************************************************************
+ * unreg()
+ *
+ * Arguments: nodeSelf - Node's own addres info 
+ *            nodeServer - Address of node server
+ *            net - net name 
+ * Returns:   0 if ok, negative if error (describe error codes)
+ * Side-Effects: 
+ *
+ * Description: Unregisters in node server
+ *****************************************************************************/
 int unreg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *net) {
     int fd, n, ret;
     char buffer[BUFFER_SIZE];
@@ -461,7 +571,6 @@ int unreg(struct sockaddr_in *nodeSelf, struct sockaddr_in *nodeServer, char *ne
  * Side-Effects: 
  *
  * Description: Prints external and recovery node 
- *
  *****************************************************************************/
 void showTopology(struct neighbours *neighbours) {
     char addrBuffer[INET_ADDRSTRLEN];
@@ -470,16 +579,46 @@ void showTopology(struct neighbours *neighbours) {
     printf("recovery node: %s:%d\n", inet_ntop(AF_INET, &neighbours->recovery.addrressInfo.sin_addr, addrBuffer, sizeof addrBuffer), ntohs(neighbours->recovery.addrressInfo.sin_port));
 }
 
+/******************************************************************************
+ * closeInternal()
+ *
+ * Arguments: internalIndex - index of the internal to be closed
+ *            neighbours - struct with all topology information
+ * 
+ * Returns:   
+ * Side-Effects: 
+ *
+ * Description: Terminate internal tcp session 
+ *****************************************************************************/
 void closeInternal(int internalIndex, struct neighbours *neighbours) {
     close(neighbours->internal[internalIndex].fd);
     removeInternalFromTable(internalIndex, neighbours);
 }
 
+/******************************************************************************
+ * closeExternal()
+ *
+ * Arguments: neighbours - struct with all topology information
+ * Returns:   
+ * Side-Effects: 
+ *
+ * Description: Terminate external tcp session  
+ *****************************************************************************/
 void closeExternal(struct neighbours *neighbours) {
     close(neighbours->external.fd);
     memset(&neighbours->external, 0, sizeof neighbours->external);
 }
 
+/******************************************************************************
+ * promoteRandomInternalToExternal()
+ *
+ * Arguments: neighbours - struct with all topology information
+ * Returns:   
+ * Side-Effects: 
+ *
+ * Description: Selects a random internal neighbour and promotes him to
+ *              external.
+ *****************************************************************************/
 void promoteRandomInternalToExternal(struct neighbours *neighbours) {
     int internalIndex = rand() % neighbours->numberOfInternals;
     neighbours->external.addrressInfo = neighbours->internal[internalIndex].addrressInfo;
@@ -518,6 +657,15 @@ enum state broadcastExtern(enum state state, struct neighbours *neighbours, stru
     return newState;
 }
 
+/******************************************************************************
+ * connectToRecovery()
+ *
+ * Arguments: neighbours - struct with all topology information
+ * Returns:   0 if ok, -1 if error 
+ * Side-Effects: 
+ *
+ * Description: Connects to re
+ *****************************************************************************/
 int connectToRecovery(struct neighbours *neighbours) {
     int err;
     char writeBuffer[BUFFER_SIZE];
@@ -547,6 +695,16 @@ int connectToRecovery(struct neighbours *neighbours) {
     return 0;
 }
 
+/******************************************************************************
+ * externMessageHandler()
+ *
+ * Arguments: neighbours - struct with all topology information
+ *            addrinfo - Address read in EXTERN message recieved
+ * Returns:   0 if ok, -1 if error 
+ * Side-Effects: 
+ *
+ * Description: Connects to re
+ *****************************************************************************/
 void externMessageHandler(struct neighbours *neighbours, struct sockaddr_in *addrinfo) {
     neighbours->recovery.addrressInfo = *addrinfo;
 }
